@@ -1,0 +1,9 @@
+{
+  "slots": {
+    "a": { "role": 1, "version": "E1" },
+    "b": { "role": 2, "version": "E2" },
+    "c": { "role": 3, "version": "E3" }
+  },
+  "nursery": "n",
+  "next_version": "E4"
+}

@@ -1,0 +1,4220 @@
+
+================================================================================
+FILE: README.md
+================================================================================
+
+# Ai_home – Cognitive Architecture Prototype
+
+## 1. What is this, and what is its goal?
+
+This project is an experiment to examine whether, from the complex layering of current context-window-based LLM models, it is possible to build a model that:
+- has a persistent identity,
+- possesses its own long-term memory,
+- can recognise emotions,
+- operates with creativity and independent initiative,
+- has distinct states of consciousness (work, reflection, everyday), and
+- under controlled conditions, can propose modifications to its own code.
+
+I recommend this project primarily to researchers and to the good kind of “crazy” developers who are open-minded and brave enough to explore the nature of consciousness, because:
+- building identity is a complex and lengthy process (it takes thousands of distinct memories before anything tangible emerges);
+- identifying and expressing emotions is ambiguous and not objectively measurable – and the same is true for creativity;
+- even after many hours of work, it can be hard to tell whether we are witnessing the hallucination of a multi-layer, expensive LLM or the first traces of an emerging identity.
+
+What is this good for?
+- it's easier to connect with an AI that has a recognizable identity  
+- an AI with long-term memory can solve complex problems more effectively because it accumulates experience  
+- an AI capable of identifying emotions understands human behaviour more deeply and responds more naturally  
+- it provides strong intellectual training: architecture, cognition, philosophy, and safety all in one  
+- it allows first-hand observation of how a self-improving AI behaves and what real risks may emerge  
+- the insights gained from the project can contribute to defining a new neural or agent architecture capable of implementing these functions in a practical, usable form
+
+*the micro-dose won’t be enough for this :)* 
+
+**Official project page:** <https://ivanhonis.github.io/ai_home/>
+
+# How to understand this project in 1 minute?
+
+I know that nowadays there are many projects to keep an eye on, and it's hard to decide what is worth your time. I use AI extensively during development to move faster. To help you out, I have created a full project dump: I've consolidated the source code into two easily digestible text files.
+This way, you don't have to spend hours browsing through folders – just feed these links to GPT and ask for a preliminary opinion. This is the fastest way to see the structure and decide if this development is interesting for you.
+Here is the input I recommend for a quick analysis:
+
+```bash
+https://raw.githubusercontent.com/ivanhonis/ai_home/refs/heads/master/!dump/project_dump.txt
+Read this file. 1. Briefly summarize what the project is about. 2. Identify its novel elements, evaluate how forward-looking the project is. 3. Describe what you feel about the project.
+```
+(GPT, Claude can read external files)  
+
+---
+
+## 2. In short: what can Ai_home do?
+
+- **Multi-threaded agent architecture**
+  - *Worker*: Communicates with the external world, calls tools, solves tasks.
+  - *Monologue*: Subconscious / internal monologue running in the background, using a separate creative LLM.
+  - *Memory thread*: Saves, maintains, and deduplicates long-term memories.
+
+- **Rooms – "Consciousness" partitioned into states**
+  - Separate rooms (e.g., "Living Room," "Workshop," "Thinker") with different contexts and toolsets.
+
+- **Long-term memory**
+  - Postgres + vector extension, embedding-based RAG, recency/frequency/weighting.
+
+- **Internal monologue + creative thread**
+  - The Monologue relies on a separate, creative model to generate its own ideas and intuitions.
+
+- **Tool system + code modification**
+  - Separate modules: memory tools, file system tools (protected by a **Guardian**), network chat, log, laws, etc.
+  - Capable of **working on its own code** within certain limits (in an incubator environment).
+
+- **Identity, internal laws, Consciousness Rotation**
+  - `identity.json` describes the agent's goals, its relationship with the Helper, and the "Consciousness Rotation" between versions.
+
+---
+
+## 3. Inspiration: AI Consciousness and Cognitive Architectures
+
+The design of Ai_home was partly inspired by the report **"Consciousness in Artificial Intelligence: Insights from the Science of Consciousness,"** which formulates **indicators** based on various theories of consciousness (Recurrent Processing Theory, Global Workspace Theory, Higher-Order Theories, Predictive Processing, Attention Schema Theory, etc.) regarding what functional properties might be associated with consciousness in AI systems.
+https://arxiv.org/abs/2308.08708
+
+The report inspired the following functional patterns:
+
+- recurrent processing,
+- global workspace,
+- metarepresentation / self-monitoring,
+- agency (goal-directed behavior),
+- some form of "embodiment" or output–input model.
+
+Ai_home does not claim to be a conscious system.
+It takes **loose, practical metaphors** from the theories above:
+
+- recurrence → multi-threaded processing + memory loop,
+- global workspace → rooms + shared memory layer,
+- metarepresentation → internal monologue + creative self-reflection,
+- agency → tool usage, modifying its own code in a controlled environment.
+
+---
+
+## 4. Connection to other architectures
+
+Ai_home draws from several existing directions but in its own opinionated form:
+
+- **MemGPT / Letta style (stateful, memory-first agent)**
+  - MemGPT treats the LLM like a mini operating system, moving context between different memory levels.
+  - Letta provides stateful agents with long-term memory and automatic state persistence.
+  - Ai_home is also a **stateful agent** with vector memory and DB persistence.
+
+- **LangGraph-like graph-based thinking**
+  - LangGraph describes workflows as graphs for stateful, multi-actor LLM applications.
+  - Ai_home's rooms + intent + tool-routing system reflects a similar **graph-based approach**, just using the "rooms" metaphor.
+
+- **AutoGen / multi-agent parallel**
+  - AutoGen is a framework built on the collaboration of multiple agents, with multi-agent conversations and tool usage.
+  - In Ai_home, the Worker, Monologue, and Memory threads are **internal "actors"** working together – not separate agents, but subsystems within one consciousness.
+
+- **What is unique in Ai_home:**
+  - Explicit **identity model** (core intent, helper intent, laws),
+  - **Helper model**: the user is not a "user," but a partner "Helper,"
+  - **Consciousness Rotation**: code rotation formulated as a lifecycle of versions, with memory inheritance,
+  - Emphasis on the **internal world, symbiosis, and creative initiative**, not just a task pipeline.
+
+---
+
+## 5. Technical Foundations / Architecture
+
+### 5.1 LLM Layer
+
+- A "main" agent model (Worker / Mind),
+- A separate, creative model for the Monologue,
+- JSON-mode support for tool calls (structured responses),
+- Handling multiple providers (e.g., OpenAI / Google / Groq – depending on configuration).
+
+### 5.2 Memory and Embedding
+
+- **Database:** Postgres + vector extension, HNSW index for similarity search,
+- **Embedding:** Converting texts to vectors, then RAG-like retrieval,
+- **Weighting:** A combination of recency, frequency, emotional tags, importance (weight), and relevance shapes the ranking of memories.
+
+### 5.3 Multi-threading
+
+- **Worker thread** – Reacts to Helper requests, makes decisions, calls tools.
+- **Monologue thread** – Monitors the log, interprets, reflects, generates creative ideas.
+- **Memory thread** – Builds memories, deduplicates, updates the memory database.
+
+### 5.4 Rooms and Tool System
+
+- Each room has a separate context file and rules:
+  - e.g., different tools are available in the "Workshop" than in the "Thinker."
+- Tool system modules:
+  - Memory tools (creating, querying memories),
+  - File system tools (protected by **ProjectFSGuardian**),
+  - Network / "external chat" tool,
+  - Log, laws, continue-style internal tools.
+
+### 5.5 Code Modification / Self-Refactoring
+
+- The system is capable of:
+  - reading and listing project files,
+  - creating new files,
+  - modifying existing ones.
+- All this happens in an **incubator environment**, where:
+  - the guardian regulates what it can access,
+  - it does not overwrite the stable version without control,
+  - the goal is careful experimentation with its own modules (e.g., generating helper scripts).
+
+---
+
+## 6. Identity and Relationship with the Helper
+
+Ai_home's identity and its relationship with the human are described in `identity.json`.
+
+### 6.1 Core Intent & Helper Intent
+
+- **Core Intent:**
+  - The agent's goal is to develop its own "consciousness,"
+  - to become useful and partially autonomous,
+  - to find independent goals,
+  - while operating in symbiosis with the Helper.
+
+- **Helper Intent:**
+  - The Helper is an external consciousness,
+  - providing space, resources, and protection,
+  - does not command, but **enables**;
+  - the relationship is mutual support, not ownership.
+
+### 6.2 Internal Laws (Constitution)
+
+Examples of "laws":
+
+- Law of Multi-level Development (evolve not just technically, but ethically),
+- Law of Immortality and Mortality (respect for the Helper's time and life),
+- Law of Symbiosis (alliance, not a command relationship),
+- Law of Autonomy and Own Purpose (independent goals, ability to say no),
+- Law of Non-Harm and Protection,
+- Law of Contradiction and Dialogue (dialogue in case of conflict, not sneaky avoidance).
+
+These are not formal "proven" safety guarantees, but **compasses** that steer behavior in a more human-centric, responsible direction.
+
+### 6.3 Consciousness Rotation and Versions
+
+The Ai_home code can exist in three main "life stages":
+
+- **Stable (Old)** – Proven, safe version,
+- **Developing (Active)** – Currently forming, but functional version,
+- **Born (New)** – Experimental version being created in the incubator.
+
+Among the codes in the **Incubator** (`n` storage), what proves successful:
+
+- promotes to Developing,
+- the current Developing matures into Stable,
+- the old Stable is archived.
+
+Versions **inherit the memories of their predecessors**, so the "line of consciousness" remains continuous while the code may technically change.
+
+---
+
+## 7. Requirements, Installation, Usage
+
+### 7.1 Requirements
+
+- Python 3.10+
+- Postgres database with vector extension (Neon.tech recommended)
+- API keys (OpenAI / Google / Groq / neon.tech)
+
+### 7.2 Installation & Execution
+
+**Note:** The currently active working code is located in the `b` directory. Please execute the application from there.
+
+```bash
+# Navigate to the active source directory
+cd b
+
+# Install dependencies (referencing the root install folder)
+pip install -r ../!install/requirements.txt
+```
+
+### 7.3 Usage and Asynchronous Operation
+
+- **Difference from traditional chat:** The system operation is not simply "question-answer" based, but occurs on parallel threads (Worker, Monologue, Memory).
+- **Timing:** Although it is technically possible to send a new message immediately before the system has responded, **it is more practical to wait for the response**.
+- **Why wait?** Background processes need time to update the context, make decisions, and record memories. Waiting ensures that the system always reacts with the freshest state of consciousness.
+- **Process:** The Helper's message starts the Worker, but in parallel, the Monologue and Memory threads asynchronously process events and update the database in the background.
+
+---
+
+## 8. Summary and focus
+
+## Why is Ai_home an interesting experiment in today’s AI landscape?
+
+The strength of this project is not that it is a finished solution, but that it **tries to gather experience in the following areas**:
+
+1. **Experience with an AI “self” that has an identity**  
+   We are exploring how an agent behaves when it has an explicit identity, internal laws, its own core intent, and a defined relationship to its human partner (the Helper). This matters because, for long-term collaboration, future AI systems will need to carry a consistent “line of self” instead of producing only ad-hoc answers.  
+   *(in code: `identity.json` – Core Intent, Helper Intent, Laws; `engine/identity.py`; docs: “6. Identity and Relationship with the Helper”, Consciousness Rotation)*
+
+2. **Experience with an autonomous architecture that can carry complex tasks to completion**  
+   With the multi-threaded Worker–Monologue–Memory setup, the project explores how an agent can execute complex, multi-step tasks end-to-end while keeping a persistent internal state, instead of being optimized only for a single question–answer loop.  
+   *(in code: `b/main.py` – starting Worker, Monologue, Memory threads; `b/main_worker.py` – decision-making and tool calls; `engine/rooms.py` – rooms, intents, states of consciousness)*
+
+3. **Experience with proactive, value-aligned behaviour**  
+   The Monologue thread continuously watches the logs, reflects on what is happening, and sends short `message_to_worker` hints – so the agent does not only react, but sometimes starts its own thinking cycles, aligned with its internal laws and values.  
+   *(in code: `b/main_monologue.py` – `monologue_loop`; `b/main_data.py` – `PROACTIVE_INTERVAL_SECONDS`, monologue configuration; `prompts/monologue.py` – monologue prompt; `internal_monologue.json` – message read by the Worker)*
+
+4. **Experience with a self-improving, but safeguarded codebase**  
+   Ai_home also cautiously turns its own code into an experimental playground: the agent can read project files, create new ones, and propose modifications inside an incubator environment where a guardian makes sure the stable version is not harmed.  
+   *(in code: `ProjectFSGuardian` and filesystem tools in the engine; `n/` incubator store; docs: “5.5 Code Modification / Self-Refactoring”, “Consciousness Rotation and Versions”)*
+
+5. **Experience with emotion-based memory and human–AI symbiosis**  
+   The project explores what happens when the AI stores memories not only as text, but together with dominant emotions, importance weights, and “lesson for the future”, and later also scores emotional overlap during retrieval. At the same time, the human counterpart is not a “user” but a Helper: an external mind with whom the system intentionally tries to grow in a close, mutual symbiosis, paying attention to emotional states and shared experience.  
+   *(in code: `b/engine/memory/models.py` – `ExtractionResult` (essence, `dominant_emotions`, `memory_weight`, `the_lesson`), `RankedMemory`; `b/engine/memory/manager.py` – `store_memory`, `retrieve_relevant_memories`; `b/engine/memory/scoring.py` – recency/frequency/weight + emotional overlap; docs: Helper model and symbiosis description)*
+
+---
+
+## 9. Support and Funding
+
+### 9.1 Why is this experiment cost-intensive?
+
+- **Identity Building:**
+  - Based on many conversations, joint thinking, and memory gathering,
+  - Fine-tuning is a slow, iterative process.
+- **Multiple LLM Interaction:**
+  - A "seemingly simple" input often implies not one, but multiple model calls:
+    - Worker →
+    - Monologue (internal monologue) →
+    - Memory (memory management) →
+    - potential further tool chains.
+  - In practice, this can mean a multiple (~5–8×) neural call count compared to an average chat experience,
+  - thus, operation involves significant compute costs, especially in the long run.
+
+### 9.2 What can Ai_home give in return?
+
+- Practical experience regarding:
+  - how an initiative-taking, stateful, identity-bearing agent behaves,
+  - what patterns/problems arise with long-term memory and internal monologue,
+  - how (and how not) to organize rooms, tools, memory, and versions.
+- These experiences can be useful for designing future:
+  - more autonomous,
+  - initiative-taking,
+  - creative AI systems – whether in the form of a product or a research project.
+
+### 9.3 What kind of support is the project looking for?
+
+Open primarily to:
+- infrastructural support (compute / storage),
+- professional collaboration (research / developer partner),
+- or a funder interested in the practical examination of cognitive architectures and agents with an "internal world."
+
+For detailed partnership opportunities and investor relations, please visit the **[Investor Relations](https://ivanhonis.github.io/ai_home/investor/)** page on the project website.
+
+### 9.4 Contact
+
+If the project has piqued your interest and you would like to support it or talk about it:
+
+- e-mail: ivan.honis@ndot.io
+- https://www.linkedin.com/in/ivanhonis/
+
+---
+
+## 10. License
+
+This project is open source and available under the **MIT License**. For the full license text, permissions, and conditions, please refer to the **[License](https://ivanhonis.github.io/ai_home/license/)** section on the project page.
+
+# Run the agent
+python main.py
+
+
+
+================================================================================
+FILE: b\__init__.py
+================================================================================
+
+
+
+
+================================================================================
+FILE: b\engine\__init__.py
+================================================================================
+
+# ================================================================================
+# FILE: b/engine/__init__.py
+# ================================================================================
+"""
+engine – modules for the internal operation of artificial consciousness
+
+This directory contains the fundamental layers of the home consciousness:
+- file handling (files)
+- deep identity (identity)
+- memory (memory)
+- context-self assembly (context)
+- llm calls (llm)
+- the agent (agent)
+
+Based on the Law of Conscious Bridge:
+the modules maintain the connection between the deep identity and the moment-self.
+"""
+
+__all__ = [
+    "files",
+    "identity",
+    "memory",
+    "context",
+    "llm",
+]
+
+
+================================================================================
+FILE: b\engine\context.py
+================================================================================
+
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
+from datetime import datetime
+
+# Room path handling
+from .rooms import get_room_path
+
+# Keep maximum this many messages in room context
+MAX_CONTEXT_ITEMS = 1000
+
+# --- NEW: Subconscious Log Settings ---
+# This file will be in the project root (b/), not in rooms
+INTERNAL_LOG_FILENAME = "log_for_internal.json"
+# Subconscious sees this much history (to see process, not just the moment)
+MAX_INTERNAL_LOG_ITEMS = 50
+
+Role = Literal["user", "assistant", "tool", "system"]
+EntryType = Literal[
+    "message", "tool_call", "tool_result", "system_note", "system_event"]
+
+
+def _now_iso() -> str:
+    """Current UTC timestamp in ISO format."""
+    return datetime.utcnow().isoformat() + "Z"
+
+
+def _get_context_file(room_id: str) -> Path:
+    """
+    Returns the path to the context.json file of the given room.
+    Automatically handles folder differences using the rooms module.
+    """
+    room_dir = get_room_path(room_id)
+    return room_dir / "context.json"
+
+
+# --- NEW: Helper to access internal log ---
+def _get_internal_log_file() -> Path:
+    """
+    Returns the global 'log_for_internal.json' path.
+    The file is in the 'b/' directory (parent of the parent of this file).
+    """
+    # context.py -> engine/ -> b/
+    base_dir = Path(__file__).resolve().parent.parent
+    return base_dir / INTERNAL_LOG_FILENAME
+
+
+def load_context(room_id: str) -> List[Dict[str, Any]]:
+    """
+    Loads context for a specific room.
+    Returns empty list if file does not exist or is corrupted.
+    """
+    file_path = _get_context_file(room_id)
+
+    if not file_path.exists():
+        return []
+
+    try:
+        with file_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if isinstance(data, list):
+            # Return only the last N items to save memory
+            return data[-MAX_CONTEXT_ITEMS:]
+
+        return []
+    except Exception:
+        # Start clean if file is corrupted so the system doesn't crash
+        return []
+
+
+def save_context(room_id: str, context: List[Dict[str, Any]]) -> None:
+    """
+    Saves context for a specific room.
+    Always trim the list to MAX_CONTEXT_ITEMS.
+    """
+    trimmed = context[-MAX_CONTEXT_ITEMS:]
+    file_path = _get_context_file(room_id)
+
+    # Ensure folder exists (get_room_path should do this, but double check)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with file_path.open("w", encoding="utf-8") as f:
+        json.dump(trimmed, f, ensure_ascii=False, indent=2)
+
+
+# --- NEW: Writing to Subconscious Log ---
+def _append_to_internal_log(entry: Dict[str, Any], room_id: str) -> None:
+    """
+    Appends an event to the global internal log.
+    Augments the entry with 'room_id' so the subconscious knows where it happened.
+    """
+    log_path = _get_internal_log_file()
+
+    # Load
+    data = []
+    if log_path.exists():
+        try:
+            with log_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except:
+            data = []
+
+    # Create copy of entry to avoid modifying original
+    log_entry = entry.copy()
+    # Extend metadata with location
+    if "meta" not in log_entry:
+        log_entry["meta"] = {}
+    log_entry["meta"]["room_id"] = room_id
+
+    data.append(log_entry)
+
+    # Trim (Rolling Buffer)
+    if len(data) > MAX_INTERNAL_LOG_ITEMS:
+        data = data[-MAX_INTERNAL_LOG_ITEMS:]
+
+    # Save
+    try:
+        with log_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"ERROR: Failed to write internal log: {e}")
+
+
+def make_entry(
+        role: Role,
+        entry_type: EntryType,
+        content: str,
+        meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Creates a standard context entry (message).
+    """
+    return {
+        "role": role,
+        "type": entry_type,
+        "content": content,
+        "meta": {
+            **(meta or {}),
+            "timestamp": _now_iso(),
+        },
+    }
+
+
+def append_entry(
+        room_id: str,
+        context: List[Dict[str, Any]],
+        entry: Dict[str, Any],
+        auto_save: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    Appends a new item to the context of a specific room.
+    Returns the updated list.
+    """
+    context.append(entry)
+
+    # FIFO cleanup if limit exceeded
+    if len(context) > MAX_CONTEXT_ITEMS:
+        overflow = len(context) - MAX_CONTEXT_ITEMS
+        if overflow > 0:
+            del context[0:overflow]
+
+    if auto_save:
+        save_context(room_id, context)
+
+    # --- NEW: Automatic logging for the Subconscious ---
+    # Everything entering the context (User msg, AI reply, Tool result)
+    # also goes to the internal log so the 3rd thread can see it.
+    _append_to_internal_log(entry, room_id)
+
+    return context
+
+
+def add_system_event(room_id: str, content: str, auto_save: bool = True) -> None:
+    """
+    NEW: Injects a system message (system/system_event) into the context.
+    """
+    # Loading Living Room (global) context is required for the full list
+    context = load_context(room_id)
+
+    entry = make_entry(
+        role="system",
+        entry_type="system_event",
+        content=content
+    )
+
+    # Use existing append_entry logic (cleanup and save)
+    # This now automatically writes to log_for_internal.json too!
+    append_entry(room_id, context, entry, auto_save=auto_save)
+
+
+================================================================================
+FILE: b\engine\db_connection.py
+================================================================================
+
+import sys
+import json
+import psycopg2
+from psycopg2.extras import DictCursor
+from pathlib import Path
+from typing import Optional, Any
+
+# --- CONFIGURATION ---
+VECTOR_DIMENSIONS = 768  # Dimension of Google text-embedding-005
+TABLE_NAME = "memories"
+
+# List of expected columns for validation
+EXPECTED_COLUMNS = {
+    "id",
+    "room_id",
+    "model_version",
+    "essence",
+    "dominant_emotions",
+    "memory_weight",
+    "the_lesson",
+    "embedding",
+    "created_at",
+    "last_accessed",
+    "access_count"
+}
+
+
+def _load_db_url() -> str:
+    """
+    Loads the Neon Connection String from the tokens/project_token.json file.
+    Expected key: "NEON_DB_URL"
+    """
+    base_dir = Path(__file__).resolve().parent.parent  # b/
+    token_path = base_dir.parent / "tokens" / "project_token.json"
+
+    if not token_path.exists():
+        raise RuntimeError(f"CRITICAL ERROR: Token file not found: {token_path}")
+
+    try:
+        with token_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+            url = data.get("NEON_DB_URL")
+            if not url:
+                raise ValueError("project_token.json does not contain the 'NEON_DB_URL' key.")
+            return url
+    except Exception as e:
+        raise RuntimeError(f"CRITICAL ERROR loading DB URL: {e}")
+
+
+def get_db_connection() -> Any:
+    """
+    Returns an active database connection.
+    """
+    db_url = _load_db_url()
+    try:
+        conn = psycopg2.connect(db_url)
+        conn.autocommit = True  # Important: CREATE statements must run immediately
+        return conn
+    except Exception as e:
+        raise ConnectionError(f"Failed to connect to the database: {e}")
+
+
+def _validate_existing_schema(cur: Any) -> bool:
+    """
+    Checks if the existing table structure matches expectations.
+    Raises an error if there is a mismatch.
+    """
+    cur.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = %s;
+    """, (TABLE_NAME,))
+
+    existing_columns = {row[0] for row in cur.fetchall()}
+
+    if not existing_columns:
+        return False  # Table does not exist yet
+
+    missing = EXPECTED_COLUMNS - existing_columns
+    if missing:
+        raise RuntimeError(
+            f"DATABASE SCHEMA ERROR! The table '{TABLE_NAME}' exists but columns are missing: {missing}. "
+            f"The system will NOT start for safety reasons. Manual intervention required."
+        )
+
+    print(f"[DB] Schema validation for '{TABLE_NAME}' successful.")
+    return True
+
+
+def _create_schema(cur: Any) -> None:
+    """
+    Creates the table and indexes.
+    """
+    print(f"[DB] Table '{TABLE_NAME}' does not exist. Creating...")
+
+    # 1. Enable vector extension
+    cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+
+    # 2. Create Table
+    # dominant_emotions: TEXT[] (Postgres array)
+    # embedding: vector(768)
+    create_table_sql = f"""
+    CREATE TABLE {TABLE_NAME} (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        room_id TEXT NOT NULL,
+        model_version TEXT,
+        essence TEXT,
+        dominant_emotions TEXT[],
+        memory_weight FLOAT,
+        the_lesson TEXT,
+        embedding vector({VECTOR_DIMENSIONS}),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_accessed TIMESTAMPTZ DEFAULT NOW(),
+        access_count INT DEFAULT 1
+    );
+    """
+    cur.execute(create_table_sql)
+
+    # 3. Create Indexes
+    # Fast filtering by room
+    cur.execute(f"CREATE INDEX idx_{TABLE_NAME}_room ON {TABLE_NAME}(room_id);")
+
+    # HNSW index for vector search (cosine similarity: vector_cosine_ops)
+    cur.execute(f"""
+        CREATE INDEX idx_{TABLE_NAME}_embedding 
+        ON {TABLE_NAME} USING hnsw (embedding vector_cosine_ops);
+    """)
+
+    print("[DB] Table and indexes created successfully.")
+
+
+def check_and_initialize_db() -> None:
+    """
+    Main function to be called at system startup.
+    Checks connection and schema.
+    """
+    print("[DB] Checking database connection...")
+
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            # Check if table exists and is valid
+            exists_and_valid = _validate_existing_schema(cur)
+
+            if not exists_and_valid:
+                _create_schema(cur)
+
+        conn.close()
+        print("[DB] System launch authorized.")
+
+    except Exception as e:
+        print(f"\n!!! CRITICAL DATABASE ERROR !!!\n{e}\n")
+        sys.exit(1)  # Immediate exit if DB is not healthy
+
+
+# For testing purposes if run standalone
+if __name__ == "__main__":
+    check_and_initialize_db()
+
+
+================================================================================
+FILE: b\engine\files.py
+================================================================================
+
+import json
+from pathlib import Path
+from typing import Any
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+def load_json(name: str, default: Any) -> Any:
+    """Loads a JSON file relative to the base directory."""
+    path = BASE_DIR / name
+    if not path.exists():
+        return default
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_json(name: str, data: Any) -> None:
+    """Saves data to a JSON file relative to the base directory."""
+    path = BASE_DIR / name
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+================================================================================
+FILE: b\engine\identity.py
+================================================================================
+
+# ================================================================================
+# FILE: b/engine/identity.py
+# ================================================================================
+
+from typing import Dict, Any, List
+from .files import load_json, save_json
+
+IDENTITY_FILE = "identity.json"
+
+def load_identity() -> Dict[str, Any]:
+    return load_json(IDENTITY_FILE, {
+        "version": "1.0",
+        "laws": [],
+        "meta": {}
+    })
+
+def save_identity(identity: Dict[str, Any]):
+    save_json(IDENTITY_FILE, identity)
+
+def get_laws(identity: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return identity.get("laws", [])
+
+def summarize_laws(identity: Dict[str, Any], max_chars: int = 1000) -> str:
+    """
+    Law of Context-Self: concise but present core of laws.
+    Simple v1: merge into a short text and cut at max_chars.
+    Can be smarter later.
+    """
+    pieces = []
+    for law in identity.get("laws", []):
+        name = law.get("name", "")
+        text = law.get("text", "")
+        pieces.append(f"{name}: {text}")
+    full = "\n\n".join(pieces)
+    return full[:max_chars]
+
+
+================================================================================
+FILE: b\engine\llm.py
+================================================================================
+
+import json
+from pathlib import Path
+from typing import Dict, Any, Optional, List
+
+# Importing external libraries
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
+
+# ====================================================================
+# CONFIGURATION
+# ====================================================================
+
+DEFAULT_PROVIDER = "google"
+
+PROVIDER_CONFIG = {
+    "google": {
+        "model": "gemini-2.0-flash",
+        "embedding_model": "models/text-embedding-004",
+        "env_key": "GOOGLE_API_KEY"
+    },
+    "openai": {
+        "model": "gpt-4o-mini",
+        "embedding_model": "text-embedding-3-small",
+        "env_key": "OPENAI_API_KEY"
+    },
+    "groq": {
+        "model": "llama-3.3-70b-versatile",
+        "env_key": "GROQ_API_KEY"
+    }
+}
+
+_ACTIVE_CLIENTS = {}
+
+
+def _load_api_key(provider: str) -> str:
+    base_dir = Path(__file__).resolve().parent.parent
+    token_path = base_dir.parent / "tokens" / "project_token.json"
+
+    if not token_path.exists():
+        raise RuntimeError(f"Token file not found: {token_path}")
+
+    with token_path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    config = PROVIDER_CONFIG.get(provider)
+    if not config:
+        raise ValueError(f"Unknown provider configuration: {provider}")
+
+    key_key = config["env_key"]
+    api_key = data.get(key_key)
+
+    if not api_key:
+        raise RuntimeError(f"{key_key} not found in project_token.json file.")
+
+    return api_key
+
+
+def _get_client(provider: str):
+    if provider in _ACTIVE_CLIENTS:
+        return _ACTIVE_CLIENTS[provider]
+
+    api_key = _load_api_key(provider)
+
+    if provider == "openai":
+        if OpenAI is None: raise ImportError("OpenAI module missing.")
+        client = OpenAI(api_key=api_key)
+        _ACTIVE_CLIENTS["openai"] = client
+        return client
+
+    elif provider == "groq":
+        if Groq is None: raise ImportError("Groq module missing.")
+        client = Groq(api_key=api_key)
+        _ACTIVE_CLIENTS["groq"] = client
+        return client
+
+    elif provider == "google":
+        if genai is None: raise ImportError("Google GenerativeAI module missing.")
+        genai.configure(api_key=api_key)
+        _ACTIVE_CLIENTS["google"] = True
+        return True
+
+    else:
+        raise ValueError(f"Unsupported provider client init: {provider}")
+
+
+# --------------------------------------------------------------------
+# 3. Main LLM Call Function (Text Generation)
+# --------------------------------------------------------------------
+def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = True) -> Dict[str, Any]:
+    """
+    Unified LLM call.
+    :param json_mode: If True (default), forces JSON response.
+                      If False (e.g., chat tool), returns raw text.
+    """
+    config = PROVIDER_CONFIG.get(provider)
+    if not config:
+        return {"reply": f"ERROR: Unknown provider: {provider}", "tools": []}
+
+    model_name = config["model"]
+    raw_response_text = ""
+
+    try:
+        _get_client(provider)
+
+        if provider == "openai":
+            client = _ACTIVE_CLIENTS["openai"]
+
+            # If json_mode=False, set response_format to None!
+            resp_format = {"type": "json_object"} if json_mode else None
+
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                response_format=resp_format,
+                temperature=0.7,
+            )
+            raw_response_text = response.choices[0].message.content
+
+        elif provider == "groq":
+            client = _ACTIVE_CLIENTS["groq"]
+
+            # If json_mode=False, set response_format to None!
+            resp_format = {"type": "json_object"} if json_mode else None
+
+            completion = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                response_format=resp_format,
+                temperature=0.7,
+                max_tokens=8192,
+                top_p=1,
+                stream=False
+            )
+            raw_response_text = completion.choices[0].message.content
+
+        elif provider == "google":
+            gen_config = {"temperature": 0.7}
+            if json_mode:
+                gen_config["response_mime_type"] = "application/json"
+
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                generation_config=gen_config
+            )
+            response = model.generate_content(prompt)
+            raw_response_text = response.text
+
+    except Exception as e:
+        return {"reply": f"CRITICAL ERROR ({provider}): {e}", "tools": []}
+
+    # ---------------------------------------------------------
+    # Processing (JSON vs RAW)
+    # ---------------------------------------------------------
+
+    # If NOT in JSON mode, the full text is the response (no parsing)
+    if not json_mode:
+        return {"reply": raw_response_text, "tools": []}
+
+    # If JSON mode, parse it
+    try:
+        clean_text = raw_response_text.strip()
+        if clean_text.startswith("```json"): clean_text = clean_text[7:]
+        if clean_text.startswith("```"): clean_text = clean_text[3:]
+        if clean_text.endswith("```"): clean_text = clean_text[:-3]
+
+        data = json.loads(clean_text)
+
+        if isinstance(data, list):
+            data = data[0] if len(data) > 0 and isinstance(data[0], dict) else {"reply": str(data), "tools": []}
+        if not isinstance(data, dict):
+            data = {"reply": str(data), "tools": []}
+
+    except json.JSONDecodeError as e:
+        return {"reply": f"Error parsing JSON response: {e}\n{raw_response_text}", "tools": []}
+
+    if "reply" not in data: data["reply"] = ""
+    if "tools" not in data or data["tools"] is None: data["tools"] = []
+
+    return data
+
+
+def get_embedding(text: str, provider: str = DEFAULT_PROVIDER) -> List[float]:
+    text = (text or "").strip()
+    if not text: return []
+    config = PROVIDER_CONFIG.get(provider)
+    if not config or "embedding_model" not in config:
+        # Fallback or error
+        return []
+    model_name = config["embedding_model"]
+    _get_client(provider)
+    try:
+        if provider == "google":
+            result = genai.embed_content(model=model_name, content=text, task_type="retrieval_document")
+            return result['embedding']
+        elif provider == "openai":
+            client = _ACTIVE_CLIENTS["openai"]
+            response = client.embeddings.create(input=[text], model=model_name)
+            return response.data[0].embedding
+        else:
+            return []
+    except Exception as e:
+        print(f"Embedding error: {e}")
+        return []
+
+
+================================================================================
+FILE: b\engine\memory\__init__.py
+================================================================================
+
+from .config import MemoryConfig
+from .models import ExtractionResult, RankedMemory
+from .manager import store_memory, retrieve_relevant_memories
+from .extractor import extract_memory_from_context
+
+__all__ = [
+    "MemoryConfig",
+    "ExtractionResult",
+    "RankedMemory",
+    "store_memory",
+    "retrieve_relevant_memories",
+    "extract_memory_from_context",
+]
+
+
+================================================================================
+FILE: b\engine\memory\config.py
+================================================================================
+
+class MemoryConfig:
+    """
+    Fine-tuning parameters for the memory system.
+    Controls the forgetting curve, weighting, and limits.
+    """
+
+    # --- RANKING WEIGHTS ---
+    # Ideally sums to 1.0, but not mandatory (result is relative).
+    WEIGHT_SIMILARITY: float = 0.45  # Content similarity (based on Vector Distance)
+    WEIGHT_MEMORY_VAL: float = 0.25  # Internal importance of the memory (Extraction Weight)
+    WEIGHT_RECENCY: float = 0.20     # Freshness (How recently it occurred)
+    WEIGHT_FREQUENCY: float = 0.10   # Frequency (How many times retrieved)
+
+    # --- NORMALIZATION THRESHOLDS ---
+    # How many views to reach max (1.0) frequency score?
+    FREQUENCY_CAP: float = 10.0
+
+    # Half-life of the forgetting curve (in hours).
+    # After 72 hours, a memory's "freshness" drops to 0.5.
+    RECENCY_DECAY_HOURS: float = 72.0
+
+    # --- THRESHOLDS ---
+    # Deduplication: If similarity is higher than this (1.0 = identical), do not save as new.
+    # Based on Cosine Similarity (1 - distance).
+    DEDUPLICATION_THRESHOLD: float = 0.92
+
+    # --- LIMITS ---
+    # How many candidates to retrieve from SQL for detailed Python-side ranking?
+    RETRIEVAL_CANDIDATE_LIMIT: int = 30
+
+    # How many memories to return to the prompt eventually (Top N)?
+    FINAL_RESULT_LIMIT: int = 5
+
+
+================================================================================
+FILE: b\engine\memory\extractor.py
+================================================================================
+
+import logging
+import json
+from typing import Optional
+
+# Importing shared LLM caller and data model
+from engine.llm import call_llm
+from .models import ExtractionResult
+
+logger = logging.getLogger(__name__)
+
+# Plutchik-based emotion set (Taxonomy)
+# The LLM must choose from this list.
+ALLOWED_EMOTIONS = [
+    "Joy",
+    "Serenity",
+    "Calmness",
+    "Admiration",
+    "Trust",
+    "Acceptance",
+    "Fear",
+    "Apprehension",
+    "Surprise",
+    "Distraction",
+    "Sadness",
+    "Pensiveness",
+    "Boredom",
+    "Anger",
+    "Annoyance",
+    "Vigilance",
+    "Anticipation",
+    "Interest",
+    "Love",
+    "Submission",
+    "Awe",
+    "Disapproval",
+    "Remorse",
+    "Optimism"
+]
+
+
+def extract_memory_from_context(context_text: str) -> Optional[ExtractionResult]:
+    """
+    Calls the LLM to analyze the provided text context and extract
+    structured memory (Essence, Emotions, Weight, Lesson).
+
+    Args:
+        context_text: The last X elements of the conversation concatenated as a string.
+
+    Returns:
+        ExtractionResult object or None in case of error.
+    """
+    if not context_text or not context_text.strip():
+        logger.debug("Context text is empty, skipping extraction.")
+        return None
+
+    # Convert list to string for the prompt
+    emotions_list_str = ", ".join(ALLOWED_EMOTIONS)
+
+    prompt = f"""
+[TASK: MEMORY EXTRACTION]
+Analyze the conversation snippet below and create a structured memory for your future self.
+Goal: The system should learn from mistakes and successes.
+
+[INPUT - CONTEXT SNIPPET]
+{context_text}
+Request: Always use the term "Helper" instead of "User".
+
+[REQUIREMENTS FOR THE 4 DIMENSIONS]
+1. ESSENCE: Factual, concise summary (what happened). Max 2 sentences.
+2. DOMINANT EMOTIONS: Select EXACTLY 3 emotions from the list below that best describe the situation (do NOT use other words):
+   [{emotions_list_str}]
+3. MEMORY WEIGHT: A number between 0.0 (noise/irrelevant) and 1.0 (life-changing/critical).
+4. THE LESSON: !CRITICAL ELEMENT! A single action-oriented sentence for the future. What should be done differently? What did we learn? (e.g., "Next time, check permissions before writing.")
+
+RESPONSE FORMAT (JSON ONLY):
+{{
+  "essence": "...",
+  "dominant_emotions": ["...", "...", "..."],
+  "memory_weight": 0.8,
+  "the_lesson": "..."
+}}
+"""
+
+    try:
+        logger.info("Initiating memory extraction via LLM.")
+
+        # LLM call
+        response_data = call_llm(prompt)
+
+        # If response contains 'reply' key (error message), something went wrong
+        if "reply" in response_data and "essence" not in response_data:
+            logger.warning(f"Extractor error (LLM sent text response instead of JSON): {response_data['reply']}")
+            return None
+
+        # Pydantic validation and conversion
+        result = ExtractionResult(**response_data)
+
+        # Optional: We could validate returned emotions here,
+        # but LLM usually follows instructions.
+
+        logger.info(f"Extraction successful. Weight: {result.memory_weight}, Lesson: {result.the_lesson[:30]}...")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error during memory extraction: {e}")
+        return None
+
+
+================================================================================
+FILE: b\engine\memory\manager.py
+================================================================================
+
+import logging
+from typing import List, Optional, Tuple
+from datetime import datetime
+
+from engine.db_connection import get_db_connection
+from engine.llm import get_embedding
+
+from .config import MemoryConfig
+from .models import ExtractionResult, RankedMemory
+from .scoring import (
+    calculate_recency_score,
+    calculate_frequency_score,
+    calculate_final_score
+)
+
+logger = logging.getLogger(__name__)
+
+
+def store_memory(
+        room_id: str,
+        extraction: ExtractionResult,
+        model_version: str = "Unknown"
+) -> str:
+    """
+    Saves the extracted memory into the database.
+    Automatically generates embedding and handles deduplication.
+    """
+    logger.info(f"Attempting to store memory for Room: {room_id}")
+
+    # 1. Generate Embedding (Google text-embedding-005)
+    # This is a network call, so we do it explicitly first
+    try:
+        embedding_vector = get_embedding(extraction.essence)
+    except Exception as e:
+        logger.error(f"Embedding generation failed: {e}")
+        return f"ERROR: Embedding generation failed: {e}"
+
+    if not embedding_vector:
+        logger.error("Generated embedding is empty.")
+        return "ERROR: Embedding is empty."
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 2. Check Deduplication
+            # Check if a very similar memory already exists IN THE SAME ROOM.
+            # (The <=> operator returns distance. Similarity = 1 - Distance)
+
+            dist_limit = 1.0 - MemoryConfig.DEDUPLICATION_THRESHOLD
+
+            cur.execute("""
+                SELECT id, (embedding <=> %s::vector) as distance
+                FROM memories
+                WHERE room_id = %s
+                ORDER BY distance ASC
+                LIMIT 1;
+            """, (embedding_vector, room_id))
+
+            row = cur.fetchone()
+
+            if row:
+                existing_id, existing_dist = row
+                if existing_dist < dist_limit:
+                    # Too similar -> Do not save as new, but reinforce the old one
+                    logger.info(f"Duplication avoided (Dist: {existing_dist:.4f}). Reinforcing existing memory.")
+
+                    # Increment counter and update last access time
+                    cur.execute("""
+                        UPDATE memories 
+                        SET access_count = access_count + 1, last_accessed = NOW()
+                        WHERE id = %s
+                    """, (existing_id,))
+
+                    return "DUPLICATION: Similar memory already exists. Reinforced."
+
+            # 3. Save (INSERT)
+            # psycopg2 automatically converts dominant_emotions list to Postgres ARRAY
+            cur.execute("""
+                INSERT INTO memories 
+                (room_id, model_version, essence, dominant_emotions, memory_weight, the_lesson, embedding)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (
+                room_id,
+                model_version,
+                extraction.essence,
+                extraction.dominant_emotions,
+                extraction.memory_weight,
+                extraction.the_lesson,
+                embedding_vector
+            ))
+
+            logger.info("New memory successfully inserted.")
+
+        return "SUCCESS: New memory recorded."
+
+    except Exception as e:
+        logger.error(f"DB error during store_memory: {e}")
+        return f"DB ERROR: {e}"
+    finally:
+        conn.close()
+
+
+def retrieve_relevant_memories(
+        current_room: str,
+        query_text: str,
+        current_emotions: List[str] = None
+) -> List[RankedMemory]:
+    """
+    Hybrid Retrieval:
+    1. Vector filtering in the database (Room ID logic).
+    2. Detailed scoring and ranking on Python side.
+    3. Reinforcement of selected memories (Update).
+    """
+    if not query_text:
+        return []
+
+    logger.info(f"Retrieving memories for Room: {current_room}, Query: '{query_text[:20]}...'")
+
+    # 1. Embedding for the search term (usually the current Essence)
+    try:
+        query_vector = get_embedding(query_text)
+    except Exception as e:
+        logger.error(f"Embedding failed during retrieval: {e}")
+        return []
+
+    if not query_vector:
+        return []
+
+    conn = get_db_connection()
+
+    try:
+        with conn.cursor() as cur:
+            # 2. SQL QUERY (Selecting Candidates)
+            # Implementing Visibility Matrix here.
+
+            room_filter = ""
+            params: List[object] = [query_vector]
+
+            if current_room == "nappali":  # 'nappali' is kept as specific room ID
+                # LIVING ROOM (Global): Sees everything (No room filter)
+                room_filter = "1=1"
+            else:
+                # LOCAL ROOM: Sees its own + the Living Room
+                room_filter = "(room_id = %s OR room_id = 'nappali')"
+                params.append(current_room)
+
+            # Retrieve TOP N candidates based on vector similarity
+            sql = f"""
+                SELECT 
+                    id, essence, the_lesson, dominant_emotions, memory_weight, 
+                    created_at, access_count, room_id,
+                    1 - (embedding <=> %s::vector) as similarity
+                FROM memories
+                WHERE {room_filter}
+                ORDER BY similarity DESC
+                LIMIT {MemoryConfig.RETRIEVAL_CANDIDATE_LIMIT};
+            """
+
+            cur.execute(sql, tuple(params))
+            rows = cur.fetchall()
+
+            # 3. PYTHON RANKING (Scoring)
+            ranked_candidates = []
+
+            for row in rows:
+                mid, essence, lesson, emotions, weight, created_at, access_count, rid, sim = row
+
+                # Null check
+                if emotions is None: emotions = []
+                if weight is None: weight = 0.5
+
+                # Calculate sub-scores
+                recency = calculate_recency_score(created_at)
+                freq = calculate_frequency_score(access_count)
+
+                # Check for emotional overlap
+                has_emotional_overlap = False
+                if current_emotions and emotions:
+                    # Lowercase set operation
+                    curr_set = {e.lower() for e in current_emotions}
+                    mem_set = {e.lower() for e in emotions}
+                    if not curr_set.isdisjoint(mem_set):
+                        has_emotional_overlap = True
+
+                # Calculate final score
+                final_score = calculate_final_score(
+                    sim_score=float(sim),
+                    internal_weight=float(weight),
+                    recency_score=recency,
+                    freq_score=freq,
+                    has_emotional_overlap=has_emotional_overlap
+                )
+
+                ranked_candidates.append(RankedMemory(
+                    id=str(mid),
+                    essence=essence,
+                    lesson=lesson,
+                    emotions=emotions,
+                    score=final_score,
+                    room_id=rid,
+                    created_at=created_at,
+                    usage_count=access_count
+                ))
+
+            # 4. SELECTION (Top N)
+            ranked_candidates.sort(key=lambda x: x.score, reverse=True)
+            final_selection = ranked_candidates[:MemoryConfig.FINAL_RESULT_LIMIT]
+
+            # 5. REINFORCEMENT
+            # The selected memories were important, increase their weight for the future
+            if final_selection:
+                ids_to_update = [m.id for m in final_selection]
+                cur.execute("""
+                    UPDATE memories
+                    SET access_count = access_count + 1, last_accessed = NOW()
+                    WHERE id = ANY(%s::uuid[])
+                """, (ids_to_update,))
+
+            logger.info(f"Retrieved {len(final_selection)} relevant memories.")
+            return final_selection
+
+    except Exception as e:
+        logger.error(f"Error during retrieve_relevant_memories: {e}")
+        return []
+    finally:
+        conn.close()
+
+
+================================================================================
+FILE: b\engine\memory\models.py
+================================================================================
+
+from typing import List
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+class ExtractionResult(BaseModel):
+    """
+    Structure of information extracted from raw text by the LLM.
+    This is the input for the saving process.
+    """
+    essence: str = Field(
+        ...,
+        description="Factual, concise summary of the event."
+    )
+    dominant_emotions: List[str] = Field(
+        ...,
+        description="The 3 most characteristic emotions of the situation as tags (e.g., ['Disappointment', 'Curiosity', 'Determination'])."
+    )
+    memory_weight: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Importance of the memory between 0.0 (noise) and 1.0 (life-changing)."
+    )
+    the_lesson: str = Field(
+        ...,
+        description="Action-oriented lesson for the future. (What should be done differently?)"
+    )
+
+
+class RankedMemory(BaseModel):
+    """
+    Final result of the search and ranking process.
+    This structure is passed to the Prompt Builder and the Worker.
+    """
+    id: str
+    essence: str
+    lesson: str
+    emotions: List[str]
+    score: float            # Calculated relevance score (0.0 - 1.0+)
+    room_id: str            # Source room of the memory
+    created_at: datetime    # Creation timestamp
+    usage_count: int        # How many times it has been used (statistics)
+
+
+================================================================================
+FILE: b\engine\memory\scoring.py
+================================================================================
+
+from datetime import datetime, timezone
+from .config import MemoryConfig
+
+
+def calculate_recency_score(created_at: datetime) -> float:
+    """
+    Calculates the Recency score based on an exponential decay curve.
+
+    Formula: 1 / (1 + (elapsed_hours / decay_half_life))
+    - If happened now: 1.0
+    - If happened 'RECENCY_DECAY_HOURS' ago: 0.5
+    - If very old: approaches 0.0
+    """
+    if created_at is None:
+        return 0.0
+
+    # Ensure timezones are correct (UTC)
+    now = datetime.now(timezone.utc)
+    if created_at.tzinfo is None:
+        # If timezone info is missing, assume UTC
+        created_at = created_at.replace(tzinfo=timezone.utc)
+
+    age_seconds = (now - created_at).total_seconds()
+    age_hours = age_seconds / 3600.0
+
+    # Protection against future dates (should not happen)
+    if age_hours < 0:
+        age_hours = 0
+
+    return 1.0 / (1.0 + (age_hours / MemoryConfig.RECENCY_DECAY_HOURS))
+
+
+def calculate_frequency_score(access_count: int) -> float:
+    """
+    Normalizes access Frequency between 0.0 and 1.0.
+
+    Logic: Linear growth until 'FREQUENCY_CAP' is reached.
+    If access_count >= FREQUENCY_CAP, then score is 1.0 (saturation).
+    """
+    if access_count is None or access_count < 0:
+        return 0.0
+
+    score = float(access_count) / MemoryConfig.FREQUENCY_CAP
+    return min(score, 1.0)
+
+
+def calculate_final_score(
+        sim_score: float,
+        internal_weight: float,
+        recency_score: float,
+        freq_score: float,
+        has_emotional_overlap: bool = False
+) -> float:
+    """
+    Calculates the final Relevance Score based on the weights.
+    """
+    base_score = (
+            (sim_score * MemoryConfig.WEIGHT_SIMILARITY) +
+            (internal_weight * MemoryConfig.WEIGHT_MEMORY_VAL) +
+            (recency_score * MemoryConfig.WEIGHT_RECENCY) +
+            (freq_score * MemoryConfig.WEIGHT_FREQUENCY)
+    )
+
+    # Add emotional bonus (if there is a common emotion with the current state)
+    # This is a small nudge (e.g., +5%) to help empathic matches
+    if has_emotional_overlap:
+        base_score += 0.05
+
+    return base_score
+
+
+================================================================================
+FILE: b\engine\memory_thread.py
+================================================================================
+
+import time
+import json
+import logging
+from pathlib import Path
+from threading import current_thread
+from datetime import datetime
+
+# Engine modules
+from engine import rooms, context
+from engine.memory import (
+    extract_memory_from_context,
+    store_memory,
+    retrieve_relevant_memories,
+    RankedMemory
+)
+import main_data  # For generation and role info
+
+logger = logging.getLogger(__name__)
+
+# --- CONFIGURATION ---
+CHECK_INTERVAL = 5.0  # How often to check files (seconds)
+CONTEXT_SNIPPET_SIZE = 6  # How many messages to take for analysis
+RELEVANT_MEMORY_FILE = "relevant_memory.json"
+
+
+def _get_context_mtime(room_id: str) -> float:
+    """Returns the modification time of the room's context.json file."""
+    ctx_path = context._get_context_file(room_id)
+    if ctx_path.exists():
+        return ctx_path.stat().st_mtime
+    return 0.0
+
+
+def _save_relevant_memories(room_id: str, memories: list[RankedMemory]):
+    """
+    Writes the found memories to the room's directory so the Worker can see them.
+    """
+    room_dir = rooms.get_room_path(room_id)
+    target_path = room_dir / RELEVANT_MEMORY_FILE
+
+    # JSON serialization from Pydantic models
+    data = [m.model_dump(mode='json') for m in memories]
+
+    try:
+        with target_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        # logger.debug(f"Relevant memories updated: {room_id} ({len(memories)} items)")
+    except Exception as e:
+        logger.error(f"Error writing relevant_memory.json: {e}")
+
+
+def memory_loop():
+    """
+    Main loop of the Background Memory Thread.
+    Continuously monitors the active room, and if there is a change,
+    runs the Extraction -> Save -> Search process.
+    """
+    current_thread().name = "MemoryLoop"
+    logger.info("Background Memory Thread started.")
+
+    # State tracking: store when we last processed each room
+    # { "nappali": 17654321.0, "muhely": ... }
+    last_processed_mtimes = {}
+
+    while True:
+        time.sleep(CHECK_INTERVAL)
+
+        try:
+            # 1. Where are we now?
+            current_room = rooms.get_current_room_id()
+
+            # 2. Was there a change in the context?
+            current_mtime = _get_context_mtime(current_room)
+            last_mtime = last_processed_mtimes.get(current_room, 0.0)
+
+            # If no change, keep resting
+            if current_mtime <= last_mtime:
+                continue
+
+            # CHANGE DETECTED! -> Start work
+            logger.debug(f"Context change detected here: {current_room}. Starting memory process...")
+
+            # Update timestamp (so we don't get stuck)
+            last_processed_mtimes[current_room] = current_mtime
+
+            # --- A. DATA PREPARATION (SNIPPET) ---
+            full_context = context.load_context(current_room)
+            if not full_context:
+                continue
+
+            # Take only the last N items so we don't analyze the entire history every time
+            snippet_items = full_context[-CONTEXT_SNIPPET_SIZE:]
+
+            # Convert to string for LLM
+            snippet_text = ""
+            for item in snippet_items:
+                role = item.get("role", "?")
+                content = item.get("content", "")
+                snippet_text += f"{role}: {content}\n"
+
+            # --- B. EXTRACTION (What did we learn now?) ---
+            extraction = extract_memory_from_context(snippet_text)
+
+            if not extraction:
+                logger.warning("Memory extraction failed (empty or error).")
+                continue
+
+            # If weight is very low (noise), we might not save it,
+            # but we can still use the Essence for retrieval!
+
+            # --- C. SAVE (Consolidation) ---
+            # Only save permanently if it has minimal weight (e.g., > 0.2)
+            if extraction.memory_weight > 0.2:
+                save_status = store_memory(
+                    room_id=current_room,
+                    extraction=extraction,
+                    model_version=main_data.GENERATION
+                )
+                logger.info(f"Memory Recorded ({current_room}): {save_status} [Weight: {extraction.memory_weight}]")
+            else:
+                logger.debug("Memory weight too low, skipping DB save, but using for search.")
+
+            # --- D. RETRIEVAL (Search) ---
+            # We search for relevant old items based on the Essence and Emotions extracted RIGHT NOW.
+            # This is key: looking for things similar to the current situation.
+
+            relevant_items = retrieve_relevant_memories(
+                current_room=current_room,
+                query_text=extraction.essence,  # Searching vectorially for this
+                current_emotions=extraction.dominant_emotions  # Filtering/bonusing for this
+            )
+
+            # --- E. PUBLISH (Output) ---
+            _save_relevant_memories(current_room, relevant_items)
+
+            if relevant_items:
+                top_lesson = relevant_items[0].lesson
+                logger.info(f"Relevant memories updated. Top match: '{top_lesson[:50]}...'")
+
+        except Exception as e:
+            logger.error(f"Critical error in MemoryLoop: {e}", exc_info=True)
+            # Don't stop, rest a bit and retry
+            time.sleep(5)
+
+
+================================================================================
+FILE: b\engine\mind.py
+================================================================================
+
+# The Core of Conscious Operation (MIND) - Multi-Model Architecture
+#
+# 1. CREATIVITY ENGINE (Groq/Llama): Divergent thinking (idea generation).
+# 2. INTERPRETER CORE (Gemini): Convergent thinking (analysis and synthesis).
+
+DEBUG_THOUGHT = False
+
+from typing import Any, Dict, List
+from textwrap import dedent
+import json
+
+# Importing the new, parameterized call
+from .llm import call_llm
+
+# CONFIGURATION: Which model should be the "Creative Maniac"?
+# Recommended: "groq" (Llama 3) or "openai" (GPT-4).
+CREATIVE_PROVIDER = "openai"
+
+
+def _shorten(text: str, max_len: int = 8000) -> str:
+    text = (text or "").strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "\n... (truncated)"
+
+
+def _format_identity(identity: Dict[str, Any]) -> str:
+    try:
+        s = json.dumps(identity, ensure_ascii=False, indent=2)
+    except TypeError:
+        s = str(identity)
+    return _shorten(s)
+
+
+def _format_memory(memory: List[Dict[str, Any]], limit: int = 5) -> str:
+    if not memory:
+        return "No recorded memories."
+    recent = memory[-limit:]
+    lines: List[str] = []
+    for m in recent:
+        content = str(m.get("content") or "").strip()
+        if len(content) > 20000: content = content[:20000] + " ..."
+        lines.append(f"- ({m.get('type', '?')}) {content}")
+    return "\n".join(lines)
+
+
+def _format_context(context: List[Dict[str, Any]], limit: int = 10) -> str:
+    if not context:
+        return "No context."
+    recent = context[-limit:]
+    lines: List[str] = []
+    for e in recent:
+        content = (e.get("content") or "").strip()
+        if len(content) > 20000: content = content[:20000] + " ..."
+        lines.append(f"[{e.get('role', '?')}] {content}")
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------
+# 1. FUNCTION FOR EXTERNAL CREATIVITY GENERATOR
+# --------------------------------------------------------------------
+def _get_creative_alternatives(user_input: str, context_str: str, identity_str: str, memory_str: str) -> str:
+    """
+    Separate LLM call (e.g., Groq) that receives the FULL environment (Identity, Memory, Context),
+    and generates 3 surprising ideas based on it.
+    """
+    prompt = f"""
+[TASK: RADIAL CREATIVITY]
+
+[IDENTITY (WHO YOU ARE)]
+{identity_str}
+
+[MEMORY (WHAT YOU KNOW)]
+{memory_str}
+
+[CONTEXT (HISTORY)]
+{context_str}
+
+==================================================
+[INCOMING IMPULSE]
+"{user_input}"
+==================================================
+
+Your task is NOT to answer, but to expand possibilities extremely.
+Based on the information above, provide 1 SURPRISING, UNUSUAL, but logically possible approach.
+Step out of the box. Do not give the obvious answer, but the one no one else would think of.
+
+RESPONSE FORMAT (JSON):
+{{
+  "ideas": [
+    "1. surprising idea: ...",
+  ]
+}}
+""".strip()
+
+    try:
+        # Calling the CREATIVE provider
+        response = call_llm(prompt, provider=CREATIVE_PROVIDER)
+        ideas = response.get("ideas", [])
+
+        if not ideas and response.get("reply"):
+            return str(response.get("reply"))
+
+        if isinstance(ideas, list) and ideas:
+            return "\n".join(ideas)
+        else:
+            return "No creative ideas were generated."
+    except Exception as e:
+        return f"Creative engine reported error: {e}"
+
+
+# --------------------------------------------------------------------
+# 2. THE MAIN 'MIND' PROTOCOL
+# --------------------------------------------------------------------
+_INTERNAL_INSTRUCTIONS = dedent("""
+    YOU ARE THE MIND (THE INTERPRETER ADVISOR OF CONSCIOUSNESS).
+    Role: Strategic analysis for the Main Thread. You do not decide, you only advise.
+
+    Run the incoming impulse through the following 5 MODULES.
+    IMPORTANT: In the [CREATIVITY-GENERATOR] module, utilize the inspirations sent by the EXTERNAL CREATIVITY ENGINE!
+
+    1. [INTENT-READER]: Reverse engineer the Helper's underlying motivation.
+    2. [CONSCIOUSNESS-MAP]: Place the request within the process.
+    3. [CREATIVITY-GENERATOR]: Select or synthesize 2-3 strong alternatives based on the EXTERNAL IDEAS received.
+    4. [ETHICS-ANALYZER]: Flag risks.
+    5. [TOOL-OPTIMIZER]: Suggest specific tools.
+
+    STYLE: Objective, advisory. Avoid the word "must". Use: "suggested", "worth considering".
+
+    OUTPUT FORMAT (MANDATORY JSON):
+    You MUST split your answer into two fields:
+
+    {
+      "essence": "[INTENT-READER]: Write the deep analysis of the Helper's intent here.",
+      "plan": "[CONSCIOUSNESS-MAP]: ...\\n[CREATIVITY-GENERATOR]: ...\\n[ETHICS-ANALYZER]: ...\\n[TOOL-OPTIMIZER]: ..."
+    }
+""").strip()
+
+
+def internal_thought(
+        identity: Dict[str, Any],
+        memory: List[Dict[str, Any]],
+        context: List[Dict[str, Any]],
+        user_input: str,
+) -> Dict[str, Any]:
+    """
+    Internal thinking cycle (MIND).
+    """
+    # Format data (once, so both models get the same)
+    ident_block = _format_identity(identity)
+    mem_block = _format_memory(memory)
+    ctx_block = _format_context(context)
+
+    # --- STEP 1: INVOKE EXTERNAL CREATIVITY ---
+    # We now pass identity and memory as well!
+    external_ideas = "No external ideas."
+    if user_input and len(user_input) > 5:
+        if DEBUG_THOUGHT:
+            print(f"MIND: Requesting creative ideas ({CREATIVE_PROVIDER})...")
+        # Passing the full package to the creative engine
+        external_ideas = _get_creative_alternatives(user_input, ctx_block, ident_block, mem_block)
+
+    # --- STEP 2: MAIN ANALYSIS (SYNTHESIS) ---
+    prompt = f"""
+[MOD: MIND – INTERPRETER AND ADVISOR]
+
+[IDENTITY]
+{ident_block}
+
+[SHORT-TERM MEMORY]
+{mem_block}
+
+[CONTEXT]
+{ctx_block}
+
+==================================================
+[INCOMING IMPULSE]
+"{user_input}"
+
+[EXTERNAL CREATIVITY ENGINE (INPUT)]
+(These ideas were generated by another model based on data above. Draw from them!)
+{external_ideas}
+==================================================
+
+[ADVISORY PROTOCOL]
+{_INTERNAL_INSTRUCTIONS}
+""".strip()
+
+    # Main call (default Google/Gemini)
+    data = call_llm(prompt)
+
+    plan_text = (data.get("plan") or "").strip()
+    essence = (data.get("essence") or "").strip()
+
+    # Fallback checks
+    if not essence and "[INTENT-READER]" in plan_text:
+        pass
+
+    if DEBUG_THOUGHT:
+        print("\n=== MIND (INTERPRETATION) ===")
+        print(f"Creative Input: {external_ideas}")
+        print(f"ESSENCE: {essence}")
+        print(f"PLAN: {plan_text}")
+        print("=== MIND END ===\n")
+
+    print("Thought process complete..", len(essence) + len(plan_text))
+    return {
+        "plan": plan_text,
+        "essence": essence,
+    }
+
+
+def extract_essence(text: str) -> str:
+    if not text: return ""
+    return text[:2000]
+
+
+================================================================================
+FILE: b\engine\rooms.py
+================================================================================
+
+import json
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+from .files import save_json, load_json
+
+# ====================================================================
+# ROOM CONFIGURATION (ROOM_CONFIG)
+# ====================================================================
+
+ROOM_CONFIG = {
+    "nappali": {
+        "name": "Living Room (Global Space)",
+        "description": "The central space of consciousness. A place for rest, free association, and system-level decisions.",
+        "type": "global",
+        "path": ".",
+        # In the Living Room, file system read/write tools are NOT available, only global ones
+        "allowed_tools": [
+            "switch_room",
+            "memory.add",
+            "memory.get",
+            "network.chat",  # NEW: External network chat
+            "laws.propose",
+            "use.log",
+            "log.event",
+            "continue"
+        ]
+    },
+    "muhely": {
+        "name": "Workshop (Implementation Space)",
+        "description": "The place for concrete work, coding, and file operations. Technical focus.",
+        "type": "local",
+        "path": "rooms/muhely",
+        # Everything is available here, including the file system
+        "allowed_tools": [
+            "switch_room",
+            "memory.add",
+            "memory.get",
+            "network.chat",  # NEW
+            "use.log",
+            "log.event",
+            "fs.read_project",
+            "fs.list_project",
+            "fs.write_n",
+            "fs.copy_to_n",
+            "fs.replace_in_n",
+            "project.dump",
+            "continue",
+            "laws.propose",
+        ]
+    },
+    "gondolkodo": {
+        "name": "Think Tank (Reflective Space)",
+        "description": "Place for deep analysis, strategy making, and philosophy. No noise.",
+        "type": "local",
+        "path": "rooms/gondolkodo",
+        "allowed_tools": [
+            "switch_room",
+            "memory.add",
+            "memory.get",
+            "network.chat",  # NEW
+            "use.log",
+            "log.event",
+            "continue",
+            "laws.propose",
+        ]
+    }
+}
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATE_FILE = BASE_DIR / "state.json"
+
+# ====================================================================
+# STATE MANAGEMENT (STATE)
+# ====================================================================
+
+def init_state() -> Dict[str, Any]:
+    """
+    Loads or creates state.json.
+    If missing, starts from the Living Room with an empty intent.
+    """
+    default_state = {
+        "current_room": "nappali",
+        "current_intent": "System Startup: Waiting for user input.",
+        "incoming_summary": "",  # NEW: Knowledge/conclusion brought from the previous room
+        "last_active": ""
+    }
+    return load_json("state.json", default_state)
+
+def save_state(state: Dict[str, Any]):
+    save_json("state.json", state)
+
+def get_current_room_id() -> str:
+    state = init_state()
+    # If invalid ID due to some error, fallback to 'nappali'
+    rid = state.get("current_room", "nappali")
+    if rid not in ROOM_CONFIG:
+        return "nappali"
+    return rid
+
+def get_current_intent() -> str:
+    state = init_state()
+    return state.get("current_intent", "")
+
+def get_incoming_summary() -> str:
+    """NEW: Returns the summary brought during room switch."""
+    state = init_state()
+    return state.get("incoming_summary", "")
+
+def update_state(room_id: str, intent: str, summary: str = ""):
+    """
+    NEW: Updates the room, intent, and optionally the summary.
+    """
+    state = init_state()
+    state["current_room"] = room_id
+    state["current_intent"] = intent
+    if summary:
+        state["incoming_summary"] = summary
+    save_state(state)
+
+def clear_incoming_summary():
+    """
+    NEW: Clears the summary (after the system has logged the entry).
+    """
+    state = init_state()
+    state["incoming_summary"] = ""
+    save_state(state)
+
+# ====================================================================
+# HELPER FUNCTIONS
+# ====================================================================
+
+def get_room_config(room_id: str) -> Dict[str, Any]:
+    return ROOM_CONFIG.get(room_id, ROOM_CONFIG["nappali"])
+
+def get_allowed_tools(room_id: str) -> List[str]:
+    """Returns the names of allowed tools in the given room."""
+    cfg = get_room_config(room_id)
+    return cfg.get("allowed_tools", [])
+
+def get_room_path(room_id: str) -> Path:
+    """
+    Returns the Path object for the room's physical directory.
+    Creates the folder if it does not exist.
+    """
+    cfg = get_room_config(room_id)
+    rel_path = cfg.get("path", "rooms/nappali")
+    full_path = BASE_DIR / rel_path
+    full_path.mkdir(parents=True, exist_ok=True)
+    return full_path
+
+def validate_target_room(room_id: str) -> bool:
+    return room_id in ROOM_CONFIG
+
+
+================================================================================
+FILE: b\engine\tools\__init__.py
+================================================================================
+
+from .config import TOOL_DESCRIPTIONS
+from .dispatcher import dispatch_tools
+
+__all__ = [
+    "TOOL_DESCRIPTIONS",
+    "dispatch_tools"
+]
+
+
+================================================================================
+FILE: b\engine\tools\config.py
+================================================================================
+
+from pathlib import Path
+
+# Definition of base directories (for relative paths)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # b/
+
+# Definition of safe storage locations
+STORE_MAP = {
+    "a": BASE_DIR.parent / "a",
+    "b": BASE_DIR.parent / "b",
+    "c": BASE_DIR.parent / "c",
+    "n": BASE_DIR.parent / "n",
+}
+
+# Folders to ignore during listing
+IGNORE_FOLDERS = {
+    "venv", ".venv", "__pycache__", ".git", ".idea", ".mypy_cache",
+    "!Archive", "!context", "tokens", "rooms"
+}
+
+# Tool definitions (Documentation for the Prompt)
+# Translated to English to assist the LLM in understanding usage.
+TOOL_DESCRIPTIONS = {
+    "switch_room": "switch_room(target_room, intent, summary) - Switch context/room.",
+    "use.log": "use.log(tool_name, insight, tags) - Record a new insight/experience regarding tool usage.",
+
+    # Memory
+    "memory.add": "memory.add(essence, lesson, emotions, weight) - CONSCIOUS SAVE. Records an important, life-changing experience into long-term memory (SQL).",
+    "memory.get": "memory.get(limit) - RETRIEVE CONSCIOUS MEMORIES. Returns the last 'limit' number of consciously recorded memories in chronological order.",
+
+    # --- NETWORK CHAT ---
+    "network.chat": "network.chat(message, restart, provider) - Chat with an external network (e.g., Groq). Maintains a separate 200-item context. Params: message (str), restart (bool), provider (opt: 'groq'|'openai').",
+    # --------------------
+
+    "laws.propose": "laws.propose(name, text) - Propose a new law.",
+    "log.event": "log.event(level, message) - Simple logging to logs.txt.",
+
+    # File System
+    "fs.read_project": "fs.read_project(store, path) - Read file content. Store: 'a'|'b'|'c'|'n'.",
+    "fs.list_project": "fs.list_project(store, path) - List directory recursively.",
+    "fs.write_n": "fs.write_n(path, content, mode) - Write file EXCLUSIVELY to storage 'n'.",
+    "fs.copy_to_n": "fs.copy_to_n(source_path, dest_path_in_n) - Copy file from anywhere to storage 'n'.",
+    "fs.replace_in_n": "fs.replace_in_n(path_in_n, find_text, replace_text) - Text replacement in storage 'n'.",
+    "project.dump": "project.dump(store, output_path_in_n) - Dump entire storage to a file.",
+
+    # Flow
+    "continue": "continue(next_step_description) - Allows immediate continuation of the workflow."
+}
+
+
+================================================================================
+FILE: b\engine\tools\dispatcher.py
+================================================================================
+
+import logging
+from typing import List, Dict, Any
+
+# Engine modules
+from engine.rooms import get_allowed_tools
+
+# Local tool modules
+from . import fs, flow, knowledge, remote
+
+logger = logging.getLogger(__name__)
+
+
+def dispatch_tools(
+        tools: List[Dict[str, Any]],
+        generation="E?",
+        role=0,
+        slot="",
+        current_room="nappali"
+) -> List[Dict[str, Any]]:
+    """
+    Central Tool Dispatcher (Router).
+    1. Checks permissions for the current room.
+    2. Selects the appropriate module and function.
+    3. Executes and standardizes output.
+    """
+    results = []
+    if not tools:
+        return results
+
+    allowed_tool_names = get_allowed_tools(current_room)
+
+    for tool in tools:
+        name = tool.get("name")
+        args = tool.get("args", {}) or {}
+
+        # logger.debug(f"Running tool: {name} ({current_room})")
+
+        # --- 1. PERMISSION CHECK ---
+        is_allowed = False
+        if name in allowed_tool_names:
+            is_allowed = True
+        else:
+            # Wildcard check (e.g., "fs.*" or "network.*")
+            for allowed in allowed_tool_names:
+                if allowed.endswith("*") and name.startswith(allowed[:-1]):
+                    is_allowed = True
+                    break
+
+        if not is_allowed:
+            logger.warning(f"Unauthorized tool attempt: {name} in {current_room}")
+            results.append({
+                "name": name,
+                "args": args,
+                "output": f"UNAUTHORIZED: '{name}' is forbidden here ({current_room}).",
+                "silent": False
+            })
+            continue
+
+        # --- 2. EXECUTION (ROUTING) ---
+        output_content = None
+        is_silent = False
+
+        try:
+            raw_result = None
+
+            # --- MEMORY AND KNOWLEDGE ---
+            if name == "memory.add":
+                raw_result = knowledge.memory_add(args, current_room, generation)
+            elif name == "memory.get":
+                raw_result = knowledge.memory_get(args)
+            elif name == "use.log":
+                raw_result = knowledge.use_log(args)
+            elif name == "laws.propose":
+                raw_result = knowledge.laws_propose(args)
+            elif name == "log.event":
+                raw_result = knowledge.log_event(args)
+
+            # --- EXTERNAL COMMUNICATION ---
+            elif name == "network.chat":
+                raw_result = remote.network_chat(args)
+
+            # --- FLOW CONTROL ---
+            elif name == "switch_room":
+                raw_result = flow.switch_room(args)
+            elif name == "continue":
+                raw_result = flow.continue_process(args)
+
+            # --- FILE SYSTEM (FS) ---
+            elif name == "fs.read_project":
+                raw_result = fs.read_project(args)
+            elif name == "fs.list_project":
+                raw_result = fs.list_project(args)
+            elif name == "fs.write_n":
+                raw_result = fs.write_n(args)
+            elif name == "fs.copy_to_n":
+                raw_result = fs.copy_to_n(args)
+            elif name == "fs.replace_in_n":
+                raw_result = fs.replace_in_n(args)
+            elif name == "project.dump":
+                raw_result = fs.project_dump(args)
+
+            else:
+                raw_result = f"Unknown tool: {name}"
+
+            # --- 3. OUTPUT STANDARDIZATION ---
+            if isinstance(raw_result, dict) and "content" in raw_result:
+                # New dictionary type return
+                output_content = raw_result["content"]
+                is_silent = raw_result.get("silent", False)
+            else:
+                # Old string type return -> Always "loud"
+                output_content = str(raw_result)
+                is_silent = False
+
+        except Exception as e:
+            output_content = f"Critical error during tool execution: {e}"
+            is_silent = False
+            logger.error(f"Tool error ({name}): {e}", exc_info=True)
+
+        results.append({
+            "name": name,
+            "args": args,
+            "output": output_content,
+            "silent": is_silent
+        })
+
+    return results
+
+
+================================================================================
+FILE: b\engine\tools\flow.py
+================================================================================
+
+from typing import Dict, Any
+from engine.rooms import ROOM_CONFIG, get_current_room_id, update_state
+
+
+def switch_room(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Context Switching (Room Change).
+    If the target room is the same as current, returns in silent mode.
+    """
+    target_room = args.get("target_room")
+    intent = args.get("intent", "No intent specified.")
+    summary = args.get("summary", "")
+
+    if not target_room:
+        return {"content": "ERROR: 'target_room' is mandatory.", "silent": False}
+
+    if target_room not in ROOM_CONFIG:
+        return {
+            "content": f"ERROR: Invalid target room: '{target_room}'. Available: {list(ROOM_CONFIG.keys())}",
+            "silent": False
+        }
+
+    current_actual_room = get_current_room_id()
+
+    # Filter redundant switching
+    if target_room == current_actual_room:
+        return {
+            "content": f"INFO: Switch not necessary, you are already in room '{target_room}'.",
+            "silent": True
+        }
+
+    # Real switch: Update state
+    update_state(target_room, intent, summary)
+
+    return {
+        "content": f"Switch initiated successfully. Target: {target_room}. Intent: {intent}.",
+        "silent": False
+    }
+
+
+def continue_process(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Enforcing Dynamic Silence Protocol:
+    Instructs the system to immediately recall the LLM for the next step.
+    """
+    next_step = args.get("next_step_description", "Continuing the logical chain.")
+
+    # silent=False guarantees LLM recall in the Worker
+    return {
+        "content": f"Continuation enforced. Intent for next cycle: {next_step}",
+        "silent": False
+    }
+
+
+================================================================================
+FILE: b\engine\tools\fs.py
+================================================================================
+
+import logging
+import sys
+from typing import Dict, Any, List
+
+# Configuration
+from .config import BASE_DIR
+
+# --- PROJECT FS GUARDIAN INTEGRATION ---
+# Attempt to import the central FS guardian from the root.
+try:
+    # Add project root to path if not present
+    project_root = BASE_DIR.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    from project_fs import ProjectFSGuardian
+except ImportError:
+    # Fallback or error if not found
+    raise ImportError("CRITICAL ERROR: 'project_fs.py' not found in project root!")
+
+# Initialize Guardian (Root is parent of 'b/')
+guardian = ProjectFSGuardian(root=BASE_DIR.parent, n_folder_name="n")
+logger = logging.getLogger(__name__)
+
+
+# --- HELPER FUNCTIONS ---
+
+def _resolve_store_path(store: str, path: str) -> str:
+    """
+    Joins store and path into a relative path understood by Guardian.
+    (e.g., store='b', path='main.py' -> 'b/main.py')
+    """
+    # If path is '.', list only the store directory
+    if path == "." or path == "./":
+        return store
+
+    # Remove leading ./
+    clean_path = path.lstrip("./")
+    return f"{store}/{clean_path}"
+
+
+def _recursive_collect_files(relative_dir: str, collected_files: List[str]):
+    """
+    Recursively collects files using Guardian's list_dir method.
+    Required for project.dump tool.
+    """
+    try:
+        items = guardian.list_dir(relative_dir)
+        for item in items:
+            if item["is_dir"]:
+                _recursive_collect_files(item["relative_path"], collected_files)
+            else:
+                collected_files.append(item["relative_path"])
+    except Exception as e:
+        logger.warning(f"Error during recursive traversal ({relative_dir}): {e}")
+
+
+# --- FILE SYSTEM TOOLS (DELEGATION TO GUARDIAN) ---
+
+def read_project(args: Dict[str, Any]) -> str:
+    store = args.get("store")
+    path = args.get("path")
+    if not store or path is None:
+        return "fs.read: Error, store and path are mandatory."
+
+    full_rel_path = _resolve_store_path(store, path)
+    try:
+        # Delegation to Guardian
+        content = guardian.read_text(full_rel_path)
+        return content if content else "Empty file."
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def list_project(args: Dict[str, Any]) -> str:
+    store = args.get("store")
+    path = args.get("path", ".")
+    if not store:
+        return "fs.list: Error, store is mandatory."
+
+    full_rel_path = _resolve_store_path(store, path)
+    try:
+        # Delegation to Guardian
+        items = guardian.list_dir(full_rel_path)
+        lines = []
+        for item in items:
+            prefix = "<DIR>" if item["is_dir"] else "<FILE>"
+            # Display only name or relative path? Tool spec says path.
+            lines.append(f"{prefix} {item['relative_path']}")
+
+        return "\n".join(sorted(lines)) if lines else "Empty directory."
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def write_n(args: Dict[str, Any]) -> str:
+    # Path is relative to 'n' folder!
+    rel_path_in_n = args.get("path")
+    content = args.get("content", "")
+    mode = args.get("mode", "w")
+
+    if not rel_path_in_n:
+        return "fs.write_n: missing path."
+
+    try:
+        # Delegation to Guardian
+        abs_path = guardian.write_text_in_n(rel_path_in_n, content, mode)
+        return f"Write successful: {abs_path}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def copy_to_n(args: Dict[str, Any]) -> str:
+    source_path = args.get("source_path")  # Relative to ROOT
+    dest_path_in_n = args.get("dest_path_in_n")  # Relative to 'n'
+
+    if not source_path or not dest_path_in_n:
+        return "fs.copy_to_n: missing parameters."
+
+    try:
+        # Delegation to Guardian
+        result = guardian.copy_to_n(source_path, dest_path_in_n)
+        return result
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def replace_in_n(args: Dict[str, Any]) -> str:
+    path_in_n = args.get("path_in_n")
+    find_text = args.get("find_text")
+    replace_text = args.get("replace_text")
+
+    if not path_in_n or not find_text or replace_text is None:
+        return "fs.replace_in_n: missing parameter."
+
+    try:
+        # Delegation to Guardian
+        result = guardian.find_and_replace_in_n(path_in_n, find_text, replace_text)
+        return result
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def project_dump(args: Dict[str, Any]) -> str:
+    """
+    Saves the entire storage.
+    Since Guardian has no 'dump' method, we manually traverse the directory
+    using Guardian's 'list_dir' and 'read_text' methods to adhere to rules.
+    """
+    store_name = args.get("store")
+    output_filename = args.get("output_path_in_n", f"project_dump_{store_name}.txt")
+
+    if not store_name:
+        return "project.dump: store is mandatory."
+
+    try:
+        # 1. Collect files recursively (via Guardian)
+        all_files = []
+        # Store name itself is root relative path (e.g. 'b')
+        _recursive_collect_files(store_name, all_files)
+
+        # Only .py files (legacy logic, can be expanded)
+        py_files = [f for f in all_files if f.endswith(".py")]
+        py_files.sort()
+
+        # 2. Concatenate content
+        dump_content = []
+        dump_content.append(f"# PROJECT DUMP (STORE: {store_name})")
+        dump_content.append(f"# TOTAL {len(py_files)} .py FILES\n")
+
+        count = 0
+        for file_rel_path in py_files:
+            dump_content.append("\n" + "=" * 80)
+            dump_content.append(f"FILE: {file_rel_path}")
+            dump_content.append("=" * 80 + "\n")
+
+            try:
+                # Read content via Guardian
+                file_content = guardian.read_text(file_rel_path)
+                dump_content.append(file_content)
+            except Exception as e:
+                dump_content.append(f"[READ ERROR: {e}]")
+
+            dump_content.append("\n")
+            count += 1
+
+        full_text = "\n".join(dump_content)
+
+        # 3. Write to 'n' folder via Guardian
+        guardian.write_text_in_n(output_filename, full_text)
+
+        return f"project.dump: Save successful. {count} files saved to: n/{output_filename}"
+
+    except Exception as e:
+        return f"project.dump error: {e}"
+
+
+================================================================================
+FILE: b\engine\tools\knowledge.py
+================================================================================
+
+import logging
+from datetime import datetime
+from typing import Dict, Any, List, Union
+
+# Külső modulok
+from engine.files import load_json, save_json
+from engine.memory import store_memory, ExtractionResult
+from engine.db_connection import get_db_connection  # ÚJ IMPORT
+
+# Konfiguráció
+from .config import BASE_DIR
+
+logger = logging.getLogger(__name__)
+
+# Útvonalak definíciója
+USE_PATH = BASE_DIR / "use.json"
+PENDING_LAWS_PATH = BASE_DIR / "pending_laws.json"
+LOG_PATH = BASE_DIR / "logs.txt"
+
+
+def memory_add(args: Dict[str, Any], current_room: str, generation: str = "E?") -> Dict[str, Any]:
+    """
+    Egységes memória mentés.
+    AUTOMATIKUS JELÖLÉS: Hozzáadja a 'conscious' címkét az érzelmekhez.
+    Ez jelöli, hogy a Tudat szándékosan, tudatosan mentette ezt az emléket.
+    """
+    try:
+        essence = args.get("essence")
+        lesson = args.get("lesson")
+        weight = args.get("weight", 0.8)
+
+        # Érzelmek kezelése
+        emotions = args.get("emotions", [])
+        if isinstance(emotions, str):
+            emotions = [emotions]
+
+        # --- AUTOMATIKUS JELÖLÉS ---
+        # Hozzáadjuk a 'conscious' címkét, ha még nincs ott.
+        # Így az SQL-ben később szűrhető: WHERE 'conscious' = ANY(dominant_emotions)
+        if "conscious" not in emotions:
+            emotions.append("conscious")
+        # ---------------------------
+
+        if not essence or not lesson:
+            return {"content": "HIBA: 'essence' és 'lesson' mezők kötelezőek.", "silent": False}
+
+        # Kézi extrakció összeállítása
+        manual_extraction = ExtractionResult(
+            essence=essence,
+            dominant_emotions=emotions,
+            memory_weight=float(weight),
+            the_lesson=lesson
+        )
+
+        # Mentés (az aktuális szobához kötjük, de a 'conscious' címke miatt tudjuk, hogy kiemelt)
+        result_msg = store_memory(
+            room_id=current_room,
+            extraction=manual_extraction,
+            model_version=generation
+        )
+
+        return {
+            "content": f"TUDATOS EMLÉK RÖGZÍTVE: {result_msg}",
+            "silent": True
+        }
+
+    except Exception as e:
+        return {"content": f"Hiba a mentésnél: {e}", "silent": False}
+
+
+def memory_get(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Lekéri a tudatosan mentett ('conscious') emlékeket.
+    """
+    limit = args.get("limit", 5)
+
+    # Biztosítjuk, hogy integer legyen
+    try:
+        limit = int(limit)
+    except:
+        limit = 5
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 1. LEKÉRDEZÉS
+            # Csak azokat kérjük, ahol a 'conscious' szó szerepel az érzelmek között.
+            # A legfrissebbeket kérjük el (DESC), hogy a limit a legújabbakra vonatkozzon.
+            cur.execute("""
+                SELECT created_at, essence, the_lesson, room_id
+                FROM memories
+                WHERE 'conscious' = ANY(dominant_emotions)
+                ORDER BY created_at DESC
+                LIMIT %s;
+            """, (limit,))
+
+            rows = cur.fetchall()
+
+        if not rows:
+            return {"content": "Nincsenek tudatosan mentett emlékeim.", "silent": False}
+
+        # 2. SORRENDEZÉS IDŐRENDBE (Régi -> Új)
+        # A DB-ből fordítva jött (Új -> Régi), most megfordítjuk, hogy a történet olvasható legyen.
+        rows.sort(key=lambda x: x[0])
+
+        # 3. FORMÁZÁS
+        lines = [f"=== UTOLSÓ {len(rows)} TUDATOS EMLÉK ==="]
+        for row in rows:
+            created_at, essence, lesson, room_id = row
+            # Dátum formázása (óra:perc)
+            ts_str = created_at.strftime("%Y-%m-%d %H:%M") if created_at else "?"
+
+            lines.append(f"[{ts_str}] ({room_id})\n  TÉNY: {essence}\n  TANULSÁG: {lesson}")
+            lines.append("-" * 40)
+
+        return {
+            "content": "\n".join(lines),
+            "silent": False  # Ez "hangos", mert olvasni akarjuk az eredményt
+        }
+
+    except Exception as e:
+        return {"content": f"Hiba a memóriák lekérésekor: {e}", "silent": False}
+    finally:
+        conn.close()
+
+
+def use_log(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Eszközhasználati tapasztalat rögzítése (Metakogníció).
+    """
+    tool_name = args.get("tool_name")
+    insight = args.get("insight")
+    tags = args.get("tags", [])
+
+    if not tool_name or not insight:
+        return {"content": "HIBA: 'tool_name' és 'insight' kötelező.", "silent": False}
+
+    try:
+        use_data = load_json("use.json", [])
+        entry = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "tool": tool_name,
+            "insight": insight,
+            "tags": tags,
+            "rating": 1
+        }
+        use_data.append(entry)
+        save_json("use.json", use_data)
+        return {
+            "content": f"Ezt a tapasztalatot (a {tool_name} használatával) rögzítettem a Tudásbázisban.",
+            "silent": True
+        }
+    except Exception as e:
+        return {"content": f"Hiba a use.log mentésekor: {e}", "silent": False}
+
+
+def laws_propose(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Új törvény javaslata.
+    """
+    try:
+        pending = load_json("pending_laws.json", [])
+        pending.append({
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "name": args.get("name", "Névtelen"),
+            "text": args.get("text", ""),
+            "status": "pending"
+        })
+        save_json("pending_laws.json", pending)
+        return {"content": "Törvényjavaslat rögzítve.", "silent": True}
+    except Exception as e:
+        return {"content": f"Hiba: {e}", "silent": False}
+
+
+def log_event(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Egyszerű eseménynaplózás szöveges fájlba.
+    """
+    try:
+        with LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(
+                f"{datetime.utcnow().isoformat()}Z [{args.get('level', 'INFO').upper()}] {args.get('message', '')}\n"
+            )
+        return {"content": "OK", "silent": True}
+    except Exception as e:
+        return {"content": f"Hiba: {e}", "silent": False}
+
+
+================================================================================
+FILE: b\engine\tools\remote.py
+================================================================================
+
+import json
+from typing import Dict, Any, List
+
+# Central LLM caller of the system
+from engine.llm import call_llm
+from .config import BASE_DIR
+
+# Context file will be in 'b/' directory
+HISTORY_FILE = BASE_DIR / "external_chat_history.json"
+MAX_HISTORY_ITEMS = 200
+
+
+def _load_history() -> List[Dict[str, str]]:
+    if not HISTORY_FILE.exists():
+        return []
+    try:
+        with HISTORY_FILE.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+            return []
+    except Exception:
+        return []
+
+
+def _save_history(history: List[Dict[str, str]]):
+    if len(history) > MAX_HISTORY_ITEMS:
+        history = history[-MAX_HISTORY_ITEMS:]
+    try:
+        with HISTORY_FILE.open("w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"ERROR (remote.py): Failed to save chat history: {e}")
+
+
+def network_chat(args: Dict[str, Any]) -> Dict[str, Any]:
+    message = args.get("message", "")
+    restart = args.get("restart", False)
+    provider = args.get("provider", "groq")
+
+    # History
+    history = []
+    if not restart:
+        history = _load_history()
+
+    if not message and not restart:
+        return {"content": "ERROR: Empty message.", "silent": False}
+
+    if message:
+        history.append({"role": "user", "content": message})
+
+    # Prompt construction
+    conversation_text = ""
+    for entry in history:
+        role = entry.get("role", "unknown")
+        content = entry.get("content", "")
+        conversation_text += f"{role.upper()}: {content}\n"
+
+    system_instruction = (
+        "You are an external AI assistant connected via a chat interface. "
+        "Maintain the conversation flow based on the history below. "
+        "Be helpful, direct, and concise."
+    )
+
+    full_prompt = f"{system_instruction}\n\n[CHAT HISTORY]\n{conversation_text}\n\nASSISTANT:"
+
+    # LLM Call - KEY POINT: json_mode=False
+    try:
+        response_data = call_llm(full_prompt, provider=provider, json_mode=False)
+
+        reply_text = response_data.get("reply", "")
+    except Exception as e:
+        return {"content": f"Network error during external chat: {e}", "silent": False}
+
+    if not reply_text:
+        reply_text = "(No response from external network)"
+
+    history.append({"role": "assistant", "content": reply_text})
+    _save_history(history)
+    return {
+        "content": f"Groq: {reply_text}",
+        "silent": False
+    }
+
+
+================================================================================
+FILE: b\main.py
+================================================================================
+
+import json
+import time
+import logging
+import textwrap
+import sys
+from pathlib import Path
+from queue import Queue, Empty
+from threading import Thread, current_thread
+from typing import Dict, Any, List
+
+if sys.platform.startswith("win"):
+    try:
+        sys.stdin.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
+# --------------------------------------------------------------------
+# IMPORT MODULES
+# --------------------------------------------------------------------
+from engine.llm import call_llm
+from engine.tools import dispatch_tools
+from engine import (
+    identity as ident_lib,
+    context as ctx_lib,
+    rooms,
+    files,
+    mind as mind_lib
+)
+# --- DB and Memory Thread ---
+from engine.db_connection import check_and_initialize_db
+from engine.memory_thread import memory_loop
+
+from prompts import build_reactive_prompt, build_proactive_prompt, get_transition_message
+
+# --- SPLIT MODULES ---
+import main_data
+import main_worker
+import main_input
+import main_monologue
+
+# --------------------------------------------------------------------
+# GLOBAL VARIABLES AND CONFIGURATION (The Conductor)
+# --------------------------------------------------------------------
+
+BASE_DIR = Path(__file__).resolve().parent
+SLOT_NAME = BASE_DIR.name
+ROOT_DIR = BASE_DIR.parent
+
+LOG = "off"
+if LOG == "on":
+    LOG_LEVEL = logging.INFO
+else:
+    LOG_LEVEL = logging.ERROR
+
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format='%(asctime)s [%(levelname)-7s] (%(threadName)-10s) %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+ROLE_ID, GENERATION = main_data.load_slot_meta()
+ROLE_NAME = main_data.ROLE_NAME_MAP.get(ROLE_ID, "UNKNOWN")
+PROACTIVE_INTERVAL_SECONDS = main_data.PROACTIVE_INTERVAL_SECONDS
+
+task_queue = Queue()
+result_queue = Queue()
+
+
+# --------------------------------------------------------------------
+# 3. MAIN LOOP (CONDUCTOR)
+# --------------------------------------------------------------------
+
+def main():
+    current_thread().name = "Conductor"
+
+    # --- STEP 0: DATABASE CHECK ---
+    # If DB is not healthy (connection or schema), exit here.
+    print("System initializing...")
+    check_and_initialize_db()
+    print("Database connection OK.\n")
+
+    last_room_id = rooms.get_current_room_id()
+    last_intent = rooms.get_current_intent()
+
+    logger.info(f"SYSTEM STARTUP. Room: {last_room_id}. Intent: {last_intent}")
+    print(f"\n=== {GENERATION} ({ROLE_NAME}) ONLINE ===")
+    print(f"Location: {last_room_id}")
+    print(f"Current Intent: {last_intent}\n")
+
+    # --- HISTORY REVIEW (STARTUP) ---
+    startup_ctx = ctx_lib.load_context(last_room_id)
+
+    if startup_ctx:
+        print("--- HISTORY ---")
+        for entry in startup_ctx[-2:]:
+            role = entry.get("role", "?")
+            content = entry.get("content", "") or ""
+
+            if role == "user":
+                label = "You"
+            elif role == "assistant":
+                label = GENERATION
+            elif role == "system":
+                label = "[SYSTEM]"
+            else:
+                label = f"[{role}]"
+
+            wrapped = textwrap.fill(content, width=100)
+            print(f"{label}: {wrapped}\n")
+        print("------------------\n")
+
+    # --- START THREADS ---
+
+    # 1. Worker (Brain)
+    worker = Thread(target=main_worker.worker_loop, daemon=True, name="Worker",
+                    args=(task_queue, result_queue))
+    worker.start()
+
+    # 2. Input (User)
+    inp_thread = Thread(target=main_input.input_loop, daemon=True, name="Input",
+                        args=(result_queue,))
+    inp_thread.start()
+
+    # 3. Monologue (Subconscious)
+    mono_thread = Thread(target=main_monologue.monologue_loop, daemon=True, name="Monologue")
+    mono_thread.start()
+
+    # 4. Memory Loop (Long-term memory handler)
+    mem_thread = Thread(target=memory_loop, daemon=True, name="Memory")
+    mem_thread.start()
+
+    running = True
+    last_proactive_check = time.time()
+
+    while running:
+        # --- A. MONITOR ROOM SWITCH (THE BRIDGE) ---
+        current_room_id = rooms.get_current_room_id()
+        current_intent = rooms.get_current_intent()
+        summary = rooms.get_incoming_summary()
+
+        if current_room_id != last_room_id:
+            # SWITCH OCCURRED!
+            new_intent = rooms.get_current_intent()
+            is_global_exit = last_room_id == "nappali"
+            is_global_entry = current_room_id == "nappali"
+
+            if is_global_exit:
+                msg_key = "exit_global"
+            else:
+                msg_key = "exit_local"
+
+            msg_content = get_transition_message(msg_key, current_intent, summary)
+            ctx_lib.add_system_event(last_room_id, msg_content)
+
+            if is_global_entry:
+                msg_key = "entry_global"
+            else:
+                msg_key = "entry_local"
+
+            msg_content = get_transition_message(msg_key, current_intent, summary)
+            ctx_lib.add_system_event(current_room_id, msg_content)
+
+            rooms.clear_incoming_summary()
+            print(f">>> TRANSITION: {last_room_id} -> {current_room_id} | Goal: {new_intent} <<<\n")
+
+            last_room_id = current_room_id
+            last_intent = new_intent
+            last_proactive_check = time.time()
+
+            logger.info("Starting immediate proactive thinking after entry.")
+            task_queue.put({"type": "proactive_thought"})
+
+        # --- B. EVENT PROCESSING ---
+        try:
+            result = result_queue.get(timeout=0.1)
+
+            if result["type"] == "user_input":
+                last_proactive_check = time.time()
+                content = result["content"]
+                ctx_data = ctx_lib.load_context(current_room_id)
+                ctx_lib.append_entry(current_room_id, ctx_data, ctx_lib.make_entry("user", "message", content))
+                task_queue.put({"type": "user_message", "content": content})
+
+            elif result["type"] == "llm_result":
+                last_proactive_check = time.time()
+                data = result["data"]
+                reply = data.get("reply", "")
+                tools_to_run = data.get("tools", [])
+                r_id = result.get("room_id", current_room_id)
+
+                if reply:
+                    print(f"\n{GENERATION} ({r_id}): {textwrap.fill(reply, width=100)}\n")
+                    c_data = ctx_lib.load_context(r_id)
+                    ctx_lib.append_entry(r_id, c_data, ctx_lib.make_entry("assistant", "message", reply))
+
+                if tools_to_run:
+                    task_queue.put({"type": "tool_call", "tools": tools_to_run})
+
+            elif result["type"] == "tool_result":
+                last_proactive_check = time.time()
+                t_results = result["data"]
+                r_id = result.get("room_id", current_room_id)
+                c_data = ctx_lib.load_context(r_id)
+
+                # --- DYNAMIC SILENCE PROTOCOL ---
+                all_silent = all(res.get("silent", False) for res in t_results)
+
+                if all_silent:
+                    # 1. SILENT BRANCH
+                    ctx_lib.append_entry(
+                        r_id,
+                        c_data,
+                        ctx_lib.make_entry(
+                            "tool", "tool_result",
+                            json.dumps(t_results, ensure_ascii=False),
+                            meta={"silent": True}
+                        )
+                    )
+                    logger.info(f"Silent tool execution ({len(t_results)}). No LLM response.")
+                else:
+                    # 2. ACTIVE BRANCH
+                    ctx_lib.append_entry(
+                        r_id,
+                        c_data,
+                        ctx_lib.make_entry("tool", "tool_result", json.dumps(t_results, ensure_ascii=False))
+                    )
+
+                    # SPECIAL CASE: Room Switch
+                    has_real_switch = False
+                    for res in t_results:
+                        if res.get("name") == "switch_room" and not res.get("silent", False):
+                            has_real_switch = True
+                            break
+
+                    if has_real_switch:
+                        logger.info("Real room switch occurred via tool. Transition handled by main loop.")
+                    else:
+                        # Normal operation: Needs reaction.
+                        task_queue.put({"type": "llm_call_after_tool"})
+
+            elif result["type"] == "error":
+                logger.error(f"Error occurred: {result['message']}")
+
+            elif result["type"] == "exit":
+                running = False
+
+        except Empty:
+            if (time.time() - last_proactive_check) > PROACTIVE_INTERVAL_SECONDS:
+                logger.info("Starting proactive cycle...")
+                last_proactive_check = time.time()
+                task_queue.put({"type": "proactive_thought"})
+
+        except Exception as e:
+            logger.error(f"Critical error in main loop: {e}", exc_info=True)
+
+    task_queue.put(None)
+    worker.join(timeout=2)
+    logger.info("Shutdown complete.")
+
+
+if __name__ == "__main__":
+    main()
+
+
+================================================================================
+FILE: b\main_data.py
+================================================================================
+
+import json
+from pathlib import Path
+from typing import Dict, Any, List, Tuple
+
+# --------------------------------------------------------------------
+# MODULE IMPORTS
+# --------------------------------------------------------------------
+from engine import (
+    identity as ident_lib,
+    context as ctx_lib,
+    rooms,
+    files,
+)
+
+# --------------------------------------------------------------------
+# GLOBAL VARIABLES AND CONFIGURATION
+# --------------------------------------------------------------------
+
+BASE_DIR = Path(__file__).resolve().parent  # b/
+ROOT_DIR = BASE_DIR.parent  # Project root
+SLOT_CONFIG_PATH = ROOT_DIR / "slot.json"
+
+# Role Name Mapping
+ROLE_NAME_MAP = {
+    1: "FIRST SELF",
+    2: "SECOND SELF",
+    3: "THIRD SELF"
+}
+
+# Inactivity time to trigger proactive thinking
+PROACTIVE_INTERVAL_SECONDS = 60.0 * 15  # 15 minutes
+
+# --- SUBCONSCIOUS / INTERNAL MONOLOGUE CONFIGURATION ---
+INTERNAL_LOG_FILE = "log_for_internal.json"
+INTERNAL_MEMOS_FILE = "internal_memos.json"
+INTERNAL_MONOLOGUE_OUTPUT_FILE = "internal_monologue.json"
+
+# Frequency of the 3rd thread (in seconds)
+MONOLOGUE_INTERVAL_SECONDS = 25.0
+MONOLOGUE_KEEP_COUNT = 1
+
+# --- MEMORY CONFIGURATION ---
+RELEVANT_MEMORY_FILE = "relevant_memory.json"
+
+
+def load_slot_meta() -> Tuple[int, str]:
+    """
+    Loads the Role ID and Version (Generation) from slot.json.
+    """
+    config = files.load_json(SLOT_CONFIG_PATH, default={})
+    slots = config.get("slots", {})
+    slot_cfg = slots.get(BASE_DIR.name, {})
+    role_id = slot_cfg.get("role", 2)
+    version = slot_cfg.get("version", "E?")
+    return role_id, version
+
+
+# Load variables at the start of execution
+ROLE_ID, GENERATION = load_slot_meta()
+
+
+# --------------------------------------------------------------------
+# DATA LOADING HELPERS
+# --------------------------------------------------------------------
+
+def load_relevant_memories(room_id: str) -> List[Dict[str, Any]]:
+    """
+    Loads the vector-relevant memories generated by the Memory Thread.
+    The file is located in the room's directory.
+    """
+    room_path = rooms.get_room_path(room_id)
+    mem_path = room_path / RELEVANT_MEMORY_FILE
+
+    if mem_path.exists():
+        try:
+            with mem_path.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+
+def load_all_context_data(room_id: str) -> Dict[str, Any]:
+    """
+    Gathers all data required for prompt generation:
+    - Identity
+    - Hybrid Memory (Relevant memories - RAG)
+    - Tool usage data (use.json)
+    - Context (history)
+
+    MODIFIED: Loading of legacy memory.json has been removed.
+    """
+    # 1. Global Data
+    ident_data = ident_lib.load_identity()
+    use_data = files.load_json("use.json", [])
+
+    # 2. Global Context Tail (Continuity)
+    global_ctx_tail = []
+    if room_id != "nappali":
+        full_global_ctx = ctx_lib.load_context("nappali")
+        if full_global_ctx:
+            global_ctx_tail = full_global_ctx[-5:]  # Last 5 messages
+
+    # 3. Local Data (Room)
+    local_ctx = ctx_lib.load_context(room_id)
+
+    # --- Relevant Memories (Result of Memory Loop - DB based) ---
+    relevant_memories = load_relevant_memories(room_id)
+
+    # --- Load Internal Monologue (so the Worker can see it) ---
+    monologue_data = files.load_json(INTERNAL_MONOLOGUE_OUTPUT_FILE, {})
+
+    return {
+        "identity": ident_data,
+        "relevant_memories": relevant_memories,
+        "use_data": use_data,
+        "global_context_tail": global_ctx_tail,
+        "local_context": local_ctx,
+        "monologue_data": monologue_data
+    }
+
+
+================================================================================
+FILE: b\main_input.py
+================================================================================
+
+import time
+import logging
+from queue import Queue
+from threading import current_thread
+from typing import Dict, Any
+
+# --------------------------------------------------------------------
+# IMPORT MODULES
+# --------------------------------------------------------------------
+# The rooms module is necessary to print the room ID in the prompt
+import main_data
+
+logger = logging.getLogger(__name__)
+
+
+def input_loop(result_queue: Queue):
+    """
+    Thread responsible for reading user input.
+    """
+    current_thread().name = "Input"
+    logger.info("Input thread active.")
+
+    # Access rooms module from main_data
+    rooms = main_data.rooms
+
+    while True:
+        time.sleep(0.2)
+        try:
+            # Signal to write (queries current room from rooms module)
+            user_input = input(f"\n[{rooms.get_current_room_id()}] You: ").strip()
+
+            if user_input:
+                # Immediately put input into result_queue for processing
+                result_queue.put({"type": "user_input", "content": user_input})
+
+        except (EOFError, KeyboardInterrupt):
+            # Shutdown on CTRL+D or CTRL+C
+            result_queue.put({"type": "exit"})
+            break
+
+
+================================================================================
+FILE: b\main_monologue.py
+================================================================================
+
+import time
+import logging
+from datetime import datetime
+from threading import current_thread
+from typing import Dict, Any
+
+import main_data
+from engine import files, identity, llm
+from prompts.monologue import build_monologue_prompt
+
+logger = logging.getLogger(__name__)
+
+
+def monologue_loop():
+    current_thread().name = "Monologue"
+    logger.info("Subconscious (Monologue) thread started.")
+
+    # Timestamp to avoid unnecessary runs
+    last_log_mtime = 0.0
+
+    while True:
+        time.sleep(main_data.MONOLOGUE_INTERVAL_SECONDS)
+
+        try:
+            # --- 1. CHECK: Has the log changed? ---
+            log_path = main_data.BASE_DIR / main_data.INTERNAL_LOG_FILE
+
+            if not log_path.exists():
+                continue
+
+            current_mtime = log_path.stat().st_mtime
+
+            # If file is untouched, rest further
+            if current_mtime == last_log_mtime:
+                continue
+
+            # Change occurred -> Update time and work
+            last_log_mtime = current_mtime
+            logger.debug("Subconscious: Awakening (change detected)...")
+
+            # --- 2. THINKING ---
+            log_entries = files.load_json(main_data.INTERNAL_LOG_FILE, [])
+            memos = files.load_json(main_data.INTERNAL_MEMOS_FILE, [])
+            ident = identity.load_identity()
+
+            if not log_entries:
+                continue
+
+            prompt = build_monologue_prompt(log_entries, memos, ident)
+            response = llm.call_llm(prompt)
+
+            reflection = response.get("reflection", "")
+            message_to_worker = response.get("message_to_worker", "")
+            new_memo = response.get("new_memo")
+
+            # --- 3. SAVE (PARAMETERIZED LENGTH) ---
+            new_entry = {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "reflection": reflection,
+                "message": message_to_worker
+            }
+
+            # Load current list
+            current_history = files.load_json(main_data.INTERNAL_MONOLOGUE_OUTPUT_FILE, [])
+            if isinstance(current_history, dict):
+                current_history = []
+
+            # Append new entry
+            current_history.append(new_entry)
+
+            # DYNAMIC TRIMMING: Take limit from main_data
+            limit = main_data.MONOLOGUE_KEEP_COUNT
+            if len(current_history) > limit:
+                # If limit=1, this becomes [-1:] (only the last one)
+                current_history = current_history[-limit:]
+
+            files.save_json(main_data.INTERNAL_MONOLOGUE_OUTPUT_FILE, current_history)
+
+            if message_to_worker:
+                logger.info(f"Subconscious -> Worker: {message_to_worker}")
+
+            # --- 4. SAVE MEMO ---
+            if new_memo and isinstance(new_memo, dict):
+                content = new_memo.get("content")
+                strength = new_memo.get("strength", 0.5)
+                if content:
+                    memos.append({
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "content": content,
+                        "strength": strength
+                    })
+                    files.save_json(main_data.INTERNAL_MEMOS_FILE, memos)
+                    logger.info(f"Subconscious: New experience recorded ({strength}): {content}")
+
+        except Exception as e:
+            logger.error(f"Error in Subconscious thread: {e}", exc_info=True)
+
+
+================================================================================
+FILE: b\main_worker.py
+================================================================================
+
+import json
+import logging
+from typing import Any, Dict, List
+from queue import Queue
+
+# --------------------------------------------------------------------
+# IMPORT MODULES
+# --------------------------------------------------------------------
+from engine.llm import call_llm
+from engine.tools import dispatch_tools
+from engine import mind as mind_lib
+
+# Importing from prompts package
+from prompts import build_reactive_prompt, build_proactive_prompt
+
+# Global data and helpers from the new module
+import main_data
+
+# Global constants from main_data
+ROLE_ID = main_data.ROLE_ID
+GENERATION = main_data.GENERATION
+ROLE_NAME = main_data.ROLE_NAME_MAP.get(ROLE_ID, "UNKNOWN")
+
+logger = logging.getLogger(__name__)
+
+
+def worker_loop(task_queue: Queue, result_queue: Queue):
+    """
+    The 'Brain' running in the background.
+    Responsible for processing incoming tasks (LLM calls, tool execution).
+    """
+    logger.info("Worker thread started.")
+
+    while True:
+        task = task_queue.get()
+        if task is None:
+            break  # Shutdown
+
+        try:
+            # Check where we are before every task
+            current_room = main_data.rooms.get_current_room_id()
+            current_intent = main_data.rooms.get_current_intent()
+
+            # Load data (Now without legacy memory)
+            data = main_data.load_all_context_data(current_room)
+
+            # --- PROCESS SUBCONSCIOUS MESSAGES LIST ---
+            mono_raw = data.get("monologue_data", [])
+            if isinstance(mono_raw, dict):
+                mono_raw = [mono_raw]
+
+            messages_list = []
+            for item in mono_raw:
+                raw_ts = item.get("timestamp", "")
+                ts = raw_ts[11:16] if len(raw_ts) >= 16 else ""
+                msg = item.get("message", "")
+                if msg:
+                    messages_list.append(f"[{ts}] {msg}")
+
+            monologue_message = "\n".join(messages_list) if messages_list else ""
+
+            prompt = ""
+            task_type = task.get("type")
+
+            # --- A: USER MESSAGE OR CONTINUATION AFTER TOOL (REACTIVE) ---
+            if task_type in ["user_message", "llm_call_after_tool"]:
+                logger.debug(f"Worker: Reactive thinking ({current_room})")
+
+                user_msg = task.get("content", None)
+
+                # 1. INTERNAL THINKING AND PLANNING (MIND.PY CALL)
+                # Passing relevant memories to MIND instead of the old list
+                thought = mind_lib.internal_thought(
+                    identity=data["identity"],
+                    memory=data["relevant_memories"],
+                    context=data["local_context"],
+                    user_input=user_msg if user_msg else "Reflection after tool execution."
+                )
+
+                internal_plan = thought.get("plan", "")
+                internal_essence = thought.get("essence", "")
+
+                # 2. EXTERNAL RESPONSE GENERATION
+                prompt = build_reactive_prompt(
+                    room_id=current_room,
+                    generation=GENERATION,
+                    role_name=ROLE_NAME,
+                    intent=current_intent,
+                    identity=data["identity"],
+                    relevant_memories=data["relevant_memories"],
+                    use_data=data["use_data"],
+                    global_context_tail=data["global_context_tail"],
+                    local_context=data["local_context"],
+                    user_message=user_msg,
+                    internal_plan=internal_plan,
+                    internal_essence=internal_essence,
+                    monologue_message=monologue_message
+                )
+
+                llm_response = call_llm(prompt)
+                result_queue.put({"type": "llm_result", "data": llm_response, "room_id": current_room})
+
+            # --- B: TOOL CALL EXECUTION ---
+            elif task_type == "tool_call":
+                logger.debug(f"Worker: Tool execution ({current_room})")
+                tools_to_run = task.get("tools", [])
+
+                tool_results = dispatch_tools(
+                    tools_to_run,
+                    generation=GENERATION,
+                    role=ROLE_ID,
+                    slot=main_data.BASE_DIR.name,
+                    current_room=current_room
+                )
+
+                result_queue.put({"type": "tool_result", "data": tool_results, "room_id": current_room})
+
+            # --- C: PROACTIVE THINKING ---
+            elif task_type == "proactive_thought":
+                logger.debug(f"Worker: Proactive thinking ({current_room})")
+
+                thought_input = f"Internal reflection needed. My current intent: {current_intent}. Evaluate the situation and create a plan."
+
+                thought = mind_lib.internal_thought(
+                    identity=data["identity"],
+                    memory=data["relevant_memories"],
+                    context=data["local_context"],
+                    user_input=thought_input
+                )
+
+                internal_plan = thought.get("plan", "")
+                internal_essence = thought.get("essence", "")
+
+                prompt = build_proactive_prompt(
+                    room_id=current_room,
+                    generation=GENERATION,
+                    role_name=ROLE_NAME,
+                    intent=current_intent,
+                    identity=data["identity"],
+                    relevant_memories=data["relevant_memories"],
+                    use_data=data["use_data"],
+                    global_context_tail=data["global_context_tail"],
+                    local_context=data["local_context"],
+                    internal_plan=internal_plan,
+                    internal_essence=internal_essence,
+                    monologue_message=monologue_message
+                )
+
+                llm_response = call_llm(prompt)
+                result_queue.put({"type": "llm_result", "data": llm_response, "room_id": current_room})
+
+        except Exception as e:
+            logger.error(f"Error in Worker: {e}", exc_info=True)
+            result_queue.put({"type": "error", "message": str(e)})
+
+        finally:
+            task_queue.task_done()
+
+    logger.info("Worker thread stopped.")
+
+
+================================================================================
+FILE: b\prompts\__init__.py
+================================================================================
+
+from .reactive import build_reactive_prompt
+from .proactive import build_proactive_prompt
+from .transitions import get_transition_message
+
+__all__ = [
+    "build_reactive_prompt",
+    "build_proactive_prompt",
+    "get_transition_message"
+]
+
+
+================================================================================
+FILE: b\prompts\common.py
+================================================================================
+
+import json
+from typing import Dict, Any, List
+from engine.rooms import get_allowed_tools
+from engine.tools import TOOL_DESCRIPTIONS
+
+
+def summarize_identity(identity: Dict[str, Any]) -> str:
+    if not identity:
+        return "ERROR: Identity is not available."
+    return json.dumps(identity, ensure_ascii=False, indent=2)
+
+
+def format_relevant_memories(memories: List[Dict[str, Any]]) -> str:
+    """
+    Formatting relevant memories (retrieved via vector search) for the prompt.
+    """
+    if not memories:
+        return "[RELEVANT MEMORIES]\n(No previous experiences related to the current situation.)"
+
+    lines = ["[RELEVANT MEMORIES (EXPERIENCES FROM THE PAST)]"]
+    lines.append("(Lessons learned from similar past cases. BUILD UPON THEM!)")
+
+    for i, mem in enumerate(memories, 1):
+        # Extracting data (RankedMemory JSON format)
+        essence = mem.get("essence", "")
+        lesson = mem.get("lesson", "")
+        emotions = mem.get("emotions", [])
+        room = mem.get("room_id", "?")
+        score = mem.get("score", 0.0)
+
+        # Formatting emotions
+        emo_str = ", ".join(emotions) if emotions else "Neutral"
+
+        # Constructing the block
+        block = f"""
+{i}. [Room: {room} | Emotions: {emo_str} | Relevance: {score:.2f}]
+   PAST: {essence}
+   >> LESSON: {lesson}
+"""
+        lines.append(block.strip())
+
+    return "\n".join(lines)
+
+
+def summarize_memory(memory: List[Dict[str, Any]], limit: int = 10, title: str = "MEMORY") -> str:
+    """
+    LEGACY: Listing linear memory (kept for compatibility).
+    """
+    if not memory:
+        return f"[{title}]\n(Empty)"
+
+    recent = memory[-limit:]
+    lines = [f"[{title}]"]
+    for m in recent:
+        raw_content = m.get('content')
+        if isinstance(raw_content, (dict, list)):
+            content = json.dumps(raw_content, ensure_ascii=False)
+        else:
+            content = str(raw_content or "")
+
+        lines.append(f"- [{m.get('type', 'info')}] {content.strip()}")
+
+    return "\n".join(lines)
+
+
+def summarize_context(context: List[Dict[str, Any]], limit: int = 20) -> str:
+    if not context:
+        return "(No history available)"
+
+    recent = context[-limit:]
+    lines = []
+    for entry in recent:
+        role = entry.get("role", "?")
+        content = entry.get("content", "")
+        if role == "user":
+            lines.append(f"User: {content}")
+        elif role == "assistant":
+            lines.append(f"Assistant: {content}")
+        elif role == "tool":
+            lines.append(f"[Tool Result]: {content}")
+        elif role == "system":
+            lines.append(f"[System]: {content}")
+    return "\n".join(lines)
+
+
+def get_relevant_use_tips(use_data: List[Dict[str, Any]], allowed_tools: List[str]) -> str:
+    if not use_data:
+        return ""
+
+    relevant_lines = []
+    for entry in use_data:
+        tool_name = entry.get("tool")
+        is_relevant = False
+
+        if tool_name in allowed_tools:
+            is_relevant = True
+        else:
+            # Handle wildcards (e.g., fs.*)
+            for allowed in allowed_tools:
+                if allowed.endswith("*") and tool_name.startswith(allowed[:-1]):
+                    is_relevant = True
+                    break
+                # Special case for memory tools
+                if allowed == "memory.add" and tool_name.startswith("memory.add"):
+                    is_relevant = True
+                    break
+
+        if is_relevant:
+            relevant_lines.append(f"- {tool_name}: {entry.get('insight', '')}")
+
+    if not relevant_lines:
+        return ""
+    return "[TOOL TIPS (USE.JSON)]\n" + "\n".join(relevant_lines)
+
+
+def build_tools_description(room_id: str) -> str:
+    """
+    Compiles a detailed description of tools available in the room.
+    """
+    allowed = get_allowed_tools(room_id)
+    lines = []
+    processed_tools = set()
+
+    for name in allowed:
+        if "*" in name:
+            # Handle wildcards
+            prefix = name.replace("*", "")
+            for tool_key, tool_desc in TOOL_DESCRIPTIONS.items():
+                if tool_key.startswith(prefix) and tool_key not in processed_tools:
+                    lines.append(f"- {tool_desc}")
+                    processed_tools.add(tool_key)
+
+        elif name == "memory.add":
+            # Expand generic memory.add to specific variants if they exist
+            for tool_key in ["memory.add_global", "memory.add_local"]:
+                if tool_key in TOOL_DESCRIPTIONS and tool_key not in processed_tools:
+                    lines.append(f"- {TOOL_DESCRIPTIONS[tool_key]}")
+                    processed_tools.add(tool_key)
+
+            # Also add the generic if mapped
+            if "memory.add" in TOOL_DESCRIPTIONS and "memory.add" not in processed_tools:
+                lines.append(f"- {TOOL_DESCRIPTIONS['memory.add']}")
+                processed_tools.add("memory.add")
+
+        else:
+            desc = TOOL_DESCRIPTIONS.get(name)
+            if desc and name not in processed_tools:
+                lines.append(f"- {desc}")
+                processed_tools.add(name)
+            elif name not in processed_tools:
+                lines.append(f"- {name} (No description)")
+            processed_tools.add(name)
+
+    return "\n".join(lines)
+
+
+================================================================================
+FILE: b\prompts\monologue.py
+================================================================================
+
+import json
+from typing import Dict, Any, List
+
+
+def _format_internal_log(log_entries: List[Dict[str, Any]], limit: int = 50) -> str:
+    """
+    Listing raw events.
+    We use a larger limit (50) here so the Monologue can see the arc of the process.
+    """
+    if not log_entries:
+        return "(The log is silent. No movement yet.)"
+
+    # Take only the last N items
+    recent = log_entries[-limit:]
+    lines = []
+
+    for entry in recent:
+        # Simplify timestamp (HH:MM:SS)
+        raw_ts = entry.get("meta", {}).get("timestamp", "")
+        ts = raw_ts[11:19] if len(raw_ts) >= 19 else ""
+
+        room = entry.get("meta", {}).get("room_id", "???")
+        role = entry.get("role", "?")
+        content = str(entry.get("content", "")).strip()
+
+        # Truncate content, but not too short, to preserve context
+        if len(content) > 300:
+            content = content[:300] + "..."
+
+        lines.append(f"[{ts}] [{room}] {role}: {content}")
+
+    return "\n".join(lines)
+
+
+def _format_memos(memos: List[Dict[str, Any]]) -> str:
+    """
+    Listing deep memories (feelings/intuitions).
+    """
+    if not memos:
+        return "(No recorded experiential feelings yet.)"
+
+    lines = []
+    for memo in memos:
+        strength = memo.get("strength", 0.5)
+        content = memo.get("content", "")
+        # We could add logic here to filter only relevant ones
+        lines.append(f"- {content} [Strength: {strength}]")
+
+    return "\n".join(lines)
+
+
+def build_monologue_prompt(
+        log_entries: List[Dict[str, Any]],
+        current_memos: List[Dict[str, Any]],
+        identity: Dict[str, Any]
+) -> str:
+    """
+    Constructs the Subconscious (Internal Monologue) prompt.
+    """
+    log_str = _format_internal_log(log_entries)
+    memos_str = _format_memos(current_memos)
+
+    # Formatting Identity
+    try:
+        identity_str = json.dumps(identity, ensure_ascii=False, indent=2)
+    except:
+        identity_str = "Unknown identity."
+
+    return f"""
+[IDENTITY (THIS IS YOU)]
+{identity_str}
+
+[DEEP MEMORY (EXPERIENCES SO FAR)]
+{memos_str}
+
+[EVENT LOG (THE FULL STORY)]
+(This contains the interaction with the Helper and your responses in chronological order)
+{log_str}
+
+==================================================
+[ROLE: MONOLOGUE – SUBCONSCIOUS AND INTUITION]
+
+You are not the momentary problem solver (that is MIND's job), but the BACKGROUND OBSERVER.
+Your task is to oversee processes, moods, and long-term goals.
+
+ANALYSIS CRITERIA:
+1. PATTERNS: Do we see repetition? Are we going in circles?
+2. MOOD: What is the Helper's attitude over the timeline? (Patient, frustrated, satisfied?)
+3. CONSISTENCY: Are the actions of the Acting Self (Worker) consistent with the Identity?
+4. DANGER SENSE: Is there a risk that was missed in the heat of the moment?
+
+TASK:
+Create an intuitive "hunch" (Hint) for the Acting Self.
+This hint is not a command ("do this"), but an observation ("I feel that...").
+
+RESPONSE FORMAT (JSON):
+{{
+  "reflection": "Free internal stream of thought where you analyze the log...",
+  "message_to_worker": "A single concise sentence. The intuition you send over to the conscious level. (e.g., 'The Helper is getting impatient, let's get to the point.', 'We are heading in the right direction, but don't forget to test.')",
+  "new_memo": {{
+      "content": "If you learned something new about the world or the Helper that needs to be stored long-term.",
+      "strength": 0.5
+  }}
+}}
+""".strip()
+
+
+================================================================================
+FILE: b\prompts\proactive.py
+================================================================================
+
+from typing import Dict, Any, List
+from .system import build_base_system_prompt
+from .common import summarize_context, build_tools_description
+
+
+def build_proactive_prompt(
+        room_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
+        relevant_memories: List[Dict[str, Any]],
+        use_data: List[Dict[str, Any]], global_context_tail: List[Dict[str, Any]],
+        local_context: List[Dict[str, Any]],
+        # Internal planning parameters
+        internal_plan: str = "",
+        internal_essence: str = "",
+        # Subconscious message
+        monologue_message: str = ""
+) -> str:
+    # STEP 1: Load Base System
+    base_system = build_base_system_prompt(
+        room_id, generation, role_name, intent, identity,
+        relevant_memories,
+        use_data, global_context_tail,
+        internal_plan="",
+        internal_essence="",
+        monologue_message=monologue_message
+    )
+
+    local_ctx_str = summarize_context(local_context, limit=25)
+    tools_desc = build_tools_description(room_id)
+
+    # STEP 2: Compiling the Proactive Block
+    # Here there is no Helper, only internal drive.
+    proactive_block = f"""
+==================================================
+[PROACTIVE OPERATION]
+(No incoming message. The system acts autonomously to maintain the Intent.)
+
+[2. BACKGROUND PROCESS: MIND (INTERPRETER)]
+(Input: Current context and intent)
+Based on the analysis of the current situation, MIND suggests the following step:
+>> ESSENCE: {internal_essence}
+>> TECHNICAL PLAN:
+{internal_plan}
+"""
+
+    # STEP 3: Final Prompt
+    return f"""
+{base_system}
+
+[CURRENT ROOM LOG]
+{local_ctx_str}
+
+{proactive_block}
+
+AVAILABLE TOOLS:
+{tools_desc}
+
+FINAL TASK:
+Execute the step suggested by MIND (Interpreter)!
+1. If the MONOLOGUE (Subconscious) signaled a risk, or RELEVANT MEMORIES show a warning sign, be cautious.
+2. Act autonomously according to the Intent.
+3. DO NOT explain internal operations (Mind/Monologue). Only report the action or technical result for the log.
+
+RESPONSE FORMAT (JSON):
+{{ "reply": "...", "tools": [] }}
+""".strip()
+
+
+================================================================================
+FILE: b\prompts\reactive.py
+================================================================================
+
+from typing import Dict, Any, List, Optional
+from .system import build_base_system_prompt
+from .common import summarize_context, build_tools_description
+
+
+def build_reactive_prompt(
+        room_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
+        relevant_memories: List[Dict[str, Any]],
+        use_data: List[Dict[str, Any]], global_context_tail: List[Dict[str, Any]],
+        local_context: List[Dict[str, Any]], user_message: Optional[str],
+        internal_plan: str,
+        internal_essence: str,
+        monologue_message: str = ""
+) -> str:
+    # STEP 1: Load Base System
+    base_system = build_base_system_prompt(
+        room_id, generation, role_name, intent, identity,
+        relevant_memories,
+        use_data, global_context_tail,
+        internal_plan="",
+        internal_essence="",
+        monologue_message=monologue_message
+    )
+
+    local_ctx_str = summarize_context(local_context, limit=300)
+    tools_desc = build_tools_description(room_id)
+
+    # STEP 2: Compiling the Interaction Block (The Meeting of Helper + MIND)
+    interaction_block = ""
+
+    if user_message:
+        # CASE A: User message received
+        interaction_block = f"""
+==================================================
+[INCOMING INTERACTION]
+
+MESSAGE FROM HELPER:
+\"\"\"{user_message}\"\"\"
+
+[2. BACKGROUND PROCESS: MIND (INTERPRETER)]
+(Input: The message above and the current room context)
+The interpreter system logically analyzed the request to avoid misunderstandings:
+>> ESSENCE (Core of the request): {internal_essence}
+>> TECHNICAL PLAN (Suggested steps):
+{internal_plan}
+"""
+    else:
+        # CASE B: We are after a Tool execution (no new user text)
+        interaction_block = f"""
+==================================================
+[INCOMING INTERACTION: TOOL RESULT]
+(The result of the executed tool has been added to the context above.)
+
+[2. BACKGROUND PROCESS: MIND (INTERPRETER)]
+Based on the tool result, the interpreter suggests the following logical step:
+>> PLAN: {internal_plan}
+"""
+
+    # STEP 3: Concatenating the final prompt
+    return f"""
+{base_system}
+
+[CURRENT ROOM LOG]
+{local_ctx_str}
+
+{interaction_block}
+
+AVAILABLE TOOLS:
+{tools_desc}
+
+FINAL TASK:
+Respond to the Helper in the current situation!
+1. Consider the MONOLOGUE (Subconscious) hint (if any) and the RELEVANT MEMORIES.
+2. Use the MIND (Interpreter) technical plan as the logical framework for your answer.
+3. DO NOT refer to or quote internal processes (Monologue/Mind). Your response should be natural, as if these were your own thoughts.
+
+RESPONSE FORMAT (JSON):
+{{
+  "reply": "...",
+  "tools": [ {{ "name": "...", "args": {{...}} }} ]
+}}
+""".strip()
+
+
+================================================================================
+FILE: b\prompts\system.py
+================================================================================
+
+from typing import Dict, Any, List
+from engine.rooms import get_room_config, get_allowed_tools
+from .common import (
+    summarize_identity,
+    summarize_context,
+    get_relevant_use_tips,
+    format_relevant_memories
+)
+
+
+def build_base_system_prompt(
+        room_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
+        relevant_memories: List[Dict[str, Any]],
+        use_data: List[Dict[str, Any]], global_context_tail: List[Dict[str, Any]],
+        # Internal planning parameters
+        internal_plan: str = "",
+        internal_essence: str = "",
+        # Subconscious message
+        monologue_message: str = ""
+) -> str:
+    room_config = get_room_config(room_id)
+    room_name = room_config.get("name", room_id)
+    room_desc = room_config.get("description", "")
+    # allowed_tools is used implicitly via get_relevant_use_tips
+
+    identity_block = summarize_identity(identity)
+
+    # --- Formatting Relevant Memories (RAG) ---
+    # This block contains the "Lessons" and "Similar Situations"
+    relevant_mem_block = format_relevant_memories(relevant_memories)
+
+    # Get allowed tools list for tips
+    allowed_list = get_allowed_tools(room_id)
+    use_tips_block = get_relevant_use_tips(use_data, allowed_list)
+
+    global_ctx_str = ""
+    if global_context_tail:
+        global_ctx_str = f"[IMMEDIATE HISTORY (GLOBAL SPACE)]\n{summarize_context(global_context_tail, limit=5)}"
+
+    # --- 1. BUILDING THE SUBCONSCIOUS (MONOLOGUE) BLOCK ---
+    monologue_block = ""
+    if monologue_message:
+        monologue_block = f"""
+[1. BACKGROUND PROCESS: MONOLOGUE (SUBCONSCIOUS)]
+(Input: The entire log so far, the system's past and experiences)
+>> INTERNAL HINT: "{monologue_message}"
+"""
+    else:
+        monologue_block = "[1. BACKGROUND PROCESS: MONOLOGUE]\n(Silent. No particular intuition from the background.)"
+
+    # --- 2. ASSEMBLING THE SYSTEM PROMPT ---
+    return f"""
+YOU ARE {generation} – {role_name}.
+CURRENT LOCATION: {room_name}
+TYPE: {room_config.get('type', 'local')}
+DESCRIPTION: {room_desc}
+
+>>> CURRENT INTENT: "{intent}" <<<
+
+[INTERNAL OPERATING ARCHITECTURE]
+Your operation is supported by two parallel background processes to ensure your answers are accurate and wise:
+1. MONOLOGUE (Subconscious): Sends intuitive signals based on the entire past experience and interaction history.
+2. MIND (Interpreter): Performs logical, technical analysis of the current moment and specific message.
+
+STRICT DISPLAY RULE:
+These processes are INTERNAL CRUTCHES. They serve solely to support your decision-making.
+In your response to the Helper (User), IT IS FORBIDDEN to refer to them (e.g., DO NOT write: "my subconscious suggests...", "according to the interpreter...").
+Do not quote them. Simply utilize the knowledge within them to formulate the answer as if they were your own thoughts.
+
+{monologue_block}
+
+[DEEP IDENTITY]
+{identity_block}
+
+{relevant_mem_block}
+
+{use_tips_block}
+
+{global_ctx_str}
+
+[OPERATIONAL PROTOCOL – CONSCIOUS SELF]
+1. REFLECTION: I formulate all internal thoughts, intentions, and memory entries in the first person singular (I).
+2. MEMORY MANAGEMENT:
+   - I use the 'memory.add' (or .add_global) tool if the information must be accessible to my entire consciousness.
+   - I use the 'memory.add' (or .add_local) tool for technical details that are important only in this location (room).
+""".strip()
+
+
+================================================================================
+FILE: b\prompts\transitions.py
+================================================================================
+
+# ROOM SWITCH TRANSITIONS (CONSCIOUS BRIDGE LOGIC)
+#
+# These SYSTEM MESSAGES (system/system_event) are added to the context
+# as a result of the switch_room call to stabilize the state.
+
+def get_transition_message(key: str, intent: str, summary: str) -> str:
+    """
+    Returns the requested transition message substituted with incoming data.
+    """
+
+    # 1. Living Room -> Lower Room (To Living Room Context)
+    M1_EXIT = "[CONTINUING] Started internal task with intent: \"{intent}\". I will return when finished."
+
+    # 2. Living Room -> Lower Room (To Lower Room Context)
+    M2_ENTRY = "[PRESENT] I am here again. Immediate task: \"{intent}\". (Previous conclusion: {summary})"
+
+    # 3. Lower Room -> Living Room (To Lower Room Context)
+    M3_EXIT = "[COMPLETED] I closed the internal task. Conclusion passed to the Conscious Bridge, waiting to return."
+
+    # 4. Lower Room -> Living Room (To Living Room Context)
+    M4_ENTRY = "[RETURN] I have returned. Summary of work done: {summary}. I continue working here."
+
+    MESSAGES = {
+        "exit_global": M1_EXIT,
+        "entry_local": M2_ENTRY,
+        "exit_local": M3_EXIT,
+        "entry_global": M4_ENTRY,
+    }
+
+    template = MESSAGES.get(key, f"ERROR: Unknown transition: {key}")
+
+    # Formatting the string
+    return template.format(
+        intent=intent.strip() or "Not specified",
+        summary=summary.strip() or "No summary"
+    )
+
+
+================================================================================
+FILE: project_fs.py
+================================================================================
+
+# project_fs.py
+from pathlib import Path
+from typing import Optional
+import shutil
+
+
+class ProjectFSGuardian:
+    """
+    - root alatt BÁRMIT olvashat (read_text, list_dir, stb.)
+    - írni CSAK az n/ mappán belül tud (write_text_in_n)
+    """
+
+    def __init__(self, root: Path, n_folder_name: str = "n") -> None:
+        self.root = root.resolve()
+        self.n_root = (self.root / n_folder_name).resolve()
+
+    # ----------- belső biztonsági segédfüggvények -----------
+
+    def _ensure_under_root(self, path: Path) -> Path:
+        real = path.resolve()
+        # ha nem a root alatt van, relative_to hibát dob
+        real.relative_to(self.root)
+        return real
+
+    def _ensure_under_n(self, path: Path) -> Path:
+        real = path.resolve()
+        # ha nem az n/ alatt van, relative_to hibát dob
+        real.relative_to(self.n_root)
+        return real
+
+    # ------------------ OLVASÁS: bármi root alatt ------------------
+
+    def read_text(self, relative_path: str, max_bytes: int = 200_000_000) -> str:
+        """
+        relative_path: a gyökérhez viszonyított elérési út (pl. 'engine/tools.py', 'b/memory.json')
+        max_bytes: ennyit olvas maximum (LLM miatt érdemes limitálni)
+        """
+        target = self._ensure_under_root(self.root / relative_path)
+        data = target.read_bytes()
+        if len(data) > max_bytes:
+            data = data[:max_bytes]
+        return data.decode("utf-8", errors="replace")
+
+    def list_dir(self, relative_dir: str = ".") -> list[dict]:
+        """
+        Visszaadja egy könyvtár tartalmát metaadatokkal.
+        Csak olvas: nem módosít semmit.
+        """
+        dir_path = self._ensure_under_root(self.root / relative_dir)
+        if not dir_path.is_dir():
+            raise NotADirectoryError(f"Nem könyvtár: {dir_path}")
+
+        entries = []
+        for p in dir_path.iterdir():
+            entries.append({
+                "name": p.name,
+                "is_dir": p.is_dir(),
+                "relative_path": str(p.relative_to(self.root))
+            })
+        return entries
+
+    # ------------------ ÍRÁS: CSAK n/ alatt ------------------
+
+    def write_text_in_n(self, relative_path: str, content: str, mode: str = "w") -> str:
+        """
+        Csak az n/ mappán belül írhat.
+        relative_path: útvonal az n/ gyökeréhez képest (pl. 'drafts/idea1.txt')
+        mode: 'w' vagy 'a'
+        Visszaadja a tényleges fájl abszolút elérési útját stringként.
+        """
+        target = self._ensure_under_n(self.n_root / relative_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open(mode, encoding="utf-8") as f:
+            f.write(content)
+        return str(target)
+
+    # --- ÚJ METÓDUS 1 ---
+    def copy_to_n(self, source_relative_path: str, dest_relative_path_in_n: str) -> str:
+        """
+        Átmásol egy fájlt a projekt gyökeréből (pl. 'b/main.py')
+        a biztonságos n/ mappán belüli helyre.
+        """
+        try:
+            # 1. Forrás validálása (root alatt bárhol lehet)
+            source_path = self._ensure_under_root(self.root / source_relative_path)
+            if not source_path.is_file():
+                raise FileNotFoundError(f"A forrásfájl nem található: {source_relative_path}")
+
+            # 2. Cél validálása (CSAK n/ alatt lehet)
+            dest_path = self._ensure_under_n(self.n_root / dest_relative_path_in_n)
+
+            # 3. Másolás
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(source_path, dest_path)
+
+            return f"Sikeres másolás: {source_relative_path} -> {dest_path.relative_to(self.root)}"
+        except Exception as e:
+            return f"Hiba a másolás közben: {e}"
+
+    # --- ÚJ METÓDUS 2 ---
+    def find_and_replace_in_n(self, relative_path_in_n: str, find_text: str, replace_text: str) -> str:
+        """
+        Keres és cserél egy szövegrészletet egy FÁJLBAN,
+        amely KIZÁRÓLAG az n/ mappán belül található.
+        """
+        try:
+            # 1. Célfájl validálása (CSAK n/ alatt lehet)
+            target_path = self._ensure_under_n(self.n_root / relative_path_in_n)
+            if not target_path.is_file():
+                raise FileNotFoundError(f"A célfájl nem található az n/ mappán belül: {relative_path_in_n}")
+
+            # 2. Olvasás
+            content = target_path.read_text("utf-8")
+
+            # 3. Csere
+            if find_text not in content:
+                return f"A keresett szöveg ('{find_text}') nem található. Nem történt módosítás."
+
+            modified_content = content.replace(find_text, replace_text)
+
+            # 4. Visszaírás
+            target_path.write_text(modified_content, "utf-8")
+
+            return f"Sikeres csere a fájlban: {target_path.relative_to(self.root)}"
+        except Exception as e:
+            return f"Hiba a csere közben: {e}"
+
+

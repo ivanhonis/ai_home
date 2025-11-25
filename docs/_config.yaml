@@ -1,0 +1,11 @@
+title: Ai_home
+email: ivan.honis@ndot.io
+description: >-
+  Experimental Cognitive Architecture: An LLM-based agent with internal state, 
+  long-term memory, subconscious monologue, and a developing identity.
+baseurl: "/ai_home"
+url: "https://ivanhonis.github.io"
+markdown: kramdown
+theme: null
+lang: en
+future: true
