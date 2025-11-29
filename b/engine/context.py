@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 
-# UPDATED: Room path handling -> Mode path handling
 from .modes import get_mode_path
 
 # Keep maximum this many messages in mode context
@@ -107,7 +106,6 @@ def _append_to_internal_log(entry: Dict[str, Any], mode_id: str) -> None:
     if "meta" not in log_entry:
         log_entry["meta"] = {}
 
-    # UPDATED: room_id -> mode_id
     log_entry["meta"]["mode_id"] = mode_id
 
     data.append(log_entry)

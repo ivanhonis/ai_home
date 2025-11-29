@@ -10,10 +10,9 @@ VECTOR_DIMENSIONS = 768  # Dimension of Google text-embedding-005
 TABLE_NAME = "memories"
 
 # List of expected columns for validation
-# UPDATED: 'room_id' replaced with 'mode_id'
 EXPECTED_COLUMNS = {
     "id",
-    "mode_id",       # Formerly room_id
+    "mode_id",
     "model_version",
     "essence",
     "dominant_emotions",
@@ -99,7 +98,6 @@ def _create_schema(cur: Any) -> None:
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
     # 2. Create Table
-    # UPDATED: room_id -> mode_id
     create_table_sql = f"""
     CREATE TABLE {TABLE_NAME} (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

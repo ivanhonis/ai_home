@@ -37,7 +37,8 @@ Here is the input I recommend for a quick analysis:
 https://raw.githubusercontent.com/ivanhonis/ai_home/refs/heads/master/!dump/project_dump.txt
 Read this file. 1. Briefly summarize what the project is about. 2. Identify its novel elements, evaluate how forward-looking the project is. 3. Describe what you feel about the project.
 ```
-(GPT, Claude can read external files)  
+
+(GPT, Claude can read external files.)    
 
 ---
 

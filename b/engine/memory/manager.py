@@ -28,7 +28,6 @@ def store_memory(
     """
     Saves the extracted memory into the database.
     Automatically generates embedding and handles deduplication.
-    UPDATED: room_id -> mode_id
     """
     logger.info(f"Attempting to store memory for Mode: {mode_id}")
 
