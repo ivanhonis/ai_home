@@ -55,7 +55,7 @@ Read this file. 1. Briefly summarize what the project is about. 2. Identify its 
 
 - **Modes – "Consciousness" partitioned into operational states**
   - Distinct modes (General, Developer, Analyst, Game) with different contexts, permissions, and toolsets.
-- 
+
 - **Long-term memory**
   - Postgres + vector extension, embedding-based RAG, recency/frequency/weighting.
 
@@ -74,7 +74,7 @@ Read this file. 1. Briefly summarize what the project is about. 2. Identify its 
 ## 3. Inspiration: AI Consciousness and Cognitive Architectures
 
 The design of Ai_home was partly inspired by the report **"Consciousness in Artificial Intelligence: Insights from the Science of Consciousness,"** which formulates **indicators** based on various theories of consciousness (Recurrent Processing Theory, Global Workspace Theory, Higher-Order Theories, Predictive Processing, Attention Schema Theory, etc.) regarding what functional properties might be associated with consciousness in AI systems.
-https://arxiv.org/abs/2308.08708
+[https://arxiv.org/abs/2308.08708](https://arxiv.org/abs/2308.08708)
 
 The report inspired the following functional patterns:
 
