@@ -6,190 +6,139 @@ from typing import Dict, Any, List
 from .config import BASE_DIR
 
 # --- PROJECT FS GUARDIAN INTEGRATION ---
-# Attempt to import the central FS guardian from the root.
 try:
-    # Add project root to path if not present
     project_root = BASE_DIR.parent
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
-
+    # Import class
     from project_fs import ProjectFSGuardian
 except ImportError:
-    # Fallback or error if not found
     raise ImportError("CRITICAL ERROR: 'project_fs.py' not found in project root!")
 
 # Initialize Guardian (Root is parent of 'b/')
-guardian = ProjectFSGuardian(root=BASE_DIR.parent, n_folder_name="n")
+guardian = ProjectFSGuardian(root=BASE_DIR.parent, n_folder_name="n", temp_folder_name="temp")
 logger = logging.getLogger(__name__)
 
 
-# --- HELPER FUNCTIONS ---
+# --- SYSTEM TOOLS ---
 
-def _resolve_store_path(store: str, path: str) -> str:
-    """
-    Joins store and path into a relative path understood by Guardian.
-    (e.g., store='b', path='main.py' -> 'b/main.py')
-    """
-    # If path is '.', list only the store directory
-    if path == "." or path == "./":
-        return store
-
-    # Remove leading ./
-    clean_path = path.lstrip("./")
-    return f"{store}/{clean_path}"
-
-
-def _recursive_collect_files(relative_dir: str, collected_files: List[str]):
-    """
-    Recursively collects files using Guardian's list_dir method.
-    Required for project.dump tool.
-    """
-    try:
-        items = guardian.list_dir(relative_dir)
-        for item in items:
-            if item["is_dir"]:
-                _recursive_collect_files(item["relative_path"], collected_files)
-            else:
-                collected_files.append(item["relative_path"])
-    except Exception as e:
-        logger.warning(f"Error during recursive traversal ({relative_dir}): {e}")
-
-
-# --- FILE SYSTEM TOOLS (DELEGATION TO GUARDIAN) ---
-
-def read_project(args: Dict[str, Any]) -> str:
+def read_file(args: Dict[str, Any]) -> str:
     store = args.get("store")
     path = args.get("path")
-    if not store or path is None:
-        return "fs.read: Error, store and path are mandatory."
-
-    full_rel_path = _resolve_store_path(store, path)
+    if not store or not path: return "Error: 'store' and 'path' are mandatory."
     try:
-        # Delegation to Guardian
-        content = guardian.read_text(full_rel_path)
-        return content if content else "Empty file."
+        return guardian.read_text(store, path)
     except Exception as e:
         return f"Error: {e}"
 
 
-def list_project(args: Dict[str, Any]) -> str:
+def list_folder(args: Dict[str, Any]) -> str:
     store = args.get("store")
     path = args.get("path", ".")
-    if not store:
-        return "fs.list: Error, store is mandatory."
-
-    full_rel_path = _resolve_store_path(store, path)
+    if not store: return "Error: 'store' is mandatory."
     try:
-        # Delegation to Guardian
-        items = guardian.list_dir(full_rel_path)
+        items = guardian.list_dir(store, path)
         lines = []
         for item in items:
             prefix = "<DIR>" if item["is_dir"] else "<FILE>"
-            # Display only name or relative path? Tool spec says path.
             lines.append(f"{prefix} {item['relative_path']}")
-
         return "\n".join(sorted(lines)) if lines else "Empty directory."
     except Exception as e:
         return f"Error: {e}"
 
 
-def write_n(args: Dict[str, Any]) -> str:
-    # Path is relative to 'n' folder!
-    rel_path_in_n = args.get("path")
+def write_file(args: Dict[str, Any]) -> str:
+    store = args.get("store")
+    path = args.get("path")
     content = args.get("content", "")
-    mode = args.get("mode", "w")
-
-    if not rel_path_in_n:
-        return "fs.write_n: missing path."
-
+    if not store or not path: return "Error: missing parameters."
     try:
-        # Delegation to Guardian
-        abs_path = guardian.write_text_in_n(rel_path_in_n, content, mode)
-        return f"Write successful: {abs_path}"
+        res = guardian.write_text(store, path, content)
+        return f"Write successful: {res}"
     except Exception as e:
         return f"Error: {e}"
 
 
-def copy_to_n(args: Dict[str, Any]) -> str:
-    source_path = args.get("source_path")  # Relative to ROOT
-    dest_path_in_n = args.get("dest_path_in_n")  # Relative to 'n'
-
-    if not source_path or not dest_path_in_n:
-        return "fs.copy_to_n: missing parameters."
-
+def edit_file(args: Dict[str, Any]) -> str:
+    store = args.get("store")
+    path = args.get("path")
+    find_text = args.get("find")
+    replace_text = args.get("replace")
+    if not store or not path or not find_text: return "Error: missing parameters."
     try:
-        # Delegation to Guardian
-        result = guardian.copy_to_n(source_path, dest_path_in_n)
-        return result
+        return guardian.replace_in_file(store, path, find_text, replace_text)
     except Exception as e:
         return f"Error: {e}"
 
 
-def replace_in_n(args: Dict[str, Any]) -> str:
-    path_in_n = args.get("path_in_n")
-    find_text = args.get("find_text")
-    replace_text = args.get("replace_text")
-
-    if not path_in_n or not find_text or replace_text is None:
-        return "fs.replace_in_n: missing parameter."
-
+def copy_file(args: Dict[str, Any]) -> str:
+    from_store = args.get("from_store")
+    from_path = args.get("from_path")
+    to_store = args.get("to_store")
+    to_path = args.get("to_path")
+    if not all([from_store, from_path, to_store, to_path]): return "Error: missing parameters."
     try:
-        # Delegation to Guardian
-        result = guardian.find_and_replace_in_n(path_in_n, find_text, replace_text)
-        return result
+        return guardian.copy_file(from_store, from_path, to_store, to_path)
     except Exception as e:
         return f"Error: {e}"
 
 
-def project_dump(args: Dict[str, Any]) -> str:
-    """
-    Saves the entire storage.
-    Since Guardian has no 'dump' method, we manually traverse the directory
-    using Guardian's 'list_dir' and 'read_text' methods to adhere to rules.
-    """
-    store_name = args.get("store")
-    output_filename = args.get("output_path_in_n", f"project_dump_{store_name}.txt")
+def create_dump(args: Dict[str, Any]) -> str:
+    target_store = args.get("target_store")
+    filename = args.get("filename", f"dump_{target_store}.txt")
 
-    if not store_name:
-        return "project.dump: store is mandatory."
+    if not target_store: return "Error: target_store is mandatory."
 
     try:
-        # 1. Collect files recursively (via Guardian)
+        # Manually verify valid store for listing
+        if target_store not in ['a', 'b', 'c', 'n']:
+            return "Error: Can only dump 'a', 'b', 'c', or 'n'."
+
+        # 1. Recursive list (We use guardian list_dir but need to recurse manually if we want full dump)
+        # Simplified: We rely on a helper to walk via guardian?
+        # Since guardian.list_dir is shallow, we need a recursive implementation here utilizing guardian.
+
         all_files = []
-        # Store name itself is root relative path (e.g. 'b')
-        _recursive_collect_files(store_name, all_files)
 
-        # Only .py files (legacy logic, can be expanded)
-        py_files = [f for f in all_files if f.endswith(".py")]
-        py_files.sort()
+        def _recurse(current_path):
+            items = guardian.list_dir(target_store, current_path)
+            for item in items:
+                # relative_path coming from guardian is full project path (e.g. b/engine/test.py)
+                # but we need sub-path relative to store for recursion logic?
+                # Actually guardian.list_dir takes path relative to store root.
 
-        # 2. Concatenate content
-        dump_content = []
-        dump_content.append(f"# PROJECT DUMP (STORE: {store_name})")
-        dump_content.append(f"# TOTAL {len(py_files)} .py FILES\n")
+                # We need the name/path relative to the folder we are listing
+                local_rel = item['name']
+                if current_path != ".":
+                    local_rel = f"{current_path}/{item['name']}"
 
-        count = 0
-        for file_rel_path in py_files:
-            dump_content.append("\n" + "=" * 80)
-            dump_content.append(f"FILE: {file_rel_path}")
-            dump_content.append("=" * 80 + "\n")
+                if item["is_dir"]:
+                    _recurse(local_rel)
+                else:
+                    # Just store the path relative to store root for reading
+                    all_files.append(local_rel)
 
+        _recurse(".")
+
+        # Filter (e.g., .py only or everything? User said full dump. Let's keep it generally text)
+        all_files.sort()
+
+        # 2. Concat
+        content_lines = [f"# FULL DUMP OF STORE: {target_store}", f"# FILES: {len(all_files)}\n"]
+
+        for fpath in all_files:
+            content_lines.append(f"\n{'=' * 60}\nFILE: {fpath}\n{'=' * 60}\n")
             try:
-                # Read content via Guardian
-                file_content = guardian.read_text(file_rel_path)
-                dump_content.append(file_content)
-            except Exception as e:
-                dump_content.append(f"[READ ERROR: {e}]")
+                text = guardian.read_text(target_store, fpath)
+                content_lines.append(text)
+            except:
+                content_lines.append("[BINARY OR ERROR]")
 
-            dump_content.append("\n")
-            count += 1
+        full_content = "\n".join(content_lines)
 
-        full_text = "\n".join(dump_content)
-
-        # 3. Write to 'n' folder via Guardian
-        guardian.write_text_in_n(output_filename, full_text)
-
-        return f"project.dump: Save successful. {count} files saved to: n/{output_filename}"
+        # 3. Write to TEMP
+        res = guardian.write_text("temp", filename, full_content)
+        return f"Dump created in TEMP: {res}"
 
     except Exception as e:
-        return f"project.dump error: {e}"
+        return f"Dump error: {e}"

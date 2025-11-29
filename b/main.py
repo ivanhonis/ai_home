@@ -24,7 +24,7 @@ from engine.tools import dispatch_tools
 from engine import (
     identity as ident_lib,
     context as ctx_lib,
-    rooms,
+    modes,  # UPDATED: rooms -> modes
     files,
     mind as mind_lib
 )
@@ -77,21 +77,21 @@ def main():
     current_thread().name = "Conductor"
 
     # --- STEP 0: DATABASE CHECK ---
-    # If DB is not healthy (connection or schema), exit here.
     print("System initializing...")
     check_and_initialize_db()
     print("Database connection OK.\n")
 
-    last_room_id = rooms.get_current_room_id()
-    last_intent = rooms.get_current_intent()
+    # UPDATED: Room -> Mode logic
+    last_mode_id = modes.get_current_mode_id()
+    last_intent = modes.get_current_intent()
 
-    logger.info(f"SYSTEM STARTUP. Room: {last_room_id}. Intent: {last_intent}")
+    logger.info(f"SYSTEM STARTUP. Mode: {last_mode_id}. Intent: {last_intent}")
     print(f"\n=== {GENERATION} ({ROLE_NAME}) ONLINE ===")
-    print(f"Location: {last_room_id}")
+    print(f"Current Mode: {last_mode_id}")
     print(f"Current Intent: {last_intent}\n")
 
     # --- HISTORY REVIEW (STARTUP) ---
-    startup_ctx = ctx_lib.load_context(last_room_id)
+    startup_ctx = ctx_lib.load_context(last_mode_id)
 
     if startup_ctx:
         print("--- HISTORY ---")
@@ -136,41 +136,43 @@ def main():
     last_proactive_check = time.time()
 
     while running:
-        # --- A. MONITOR ROOM SWITCH (THE BRIDGE) ---
-        current_room_id = rooms.get_current_room_id()
-        current_intent = rooms.get_current_intent()
-        summary = rooms.get_incoming_summary()
+        # --- A. MONITOR MODE SWITCH (THE BRIDGE) ---
+        current_mode_id = modes.get_current_mode_id()
+        current_intent = modes.get_current_intent()
+        summary = modes.get_incoming_summary()
 
-        if current_room_id != last_room_id:
+        if current_mode_id != last_mode_id:
             # SWITCH OCCURRED!
-            new_intent = rooms.get_current_intent()
-            is_global_exit = last_room_id == "nappali"
-            is_global_entry = current_room_id == "nappali"
+            new_intent = modes.get_current_intent()
 
-            if is_global_exit:
-                msg_key = "exit_global"
+            # Logic: 'general' is the hub.
+            is_general_exit = last_mode_id == "general"
+            is_general_entry = current_mode_id == "general"
+
+            if is_general_exit:
+                msg_key = "exit_general"
             else:
                 msg_key = "exit_local"
 
             msg_content = get_transition_message(msg_key, current_intent, summary)
-            ctx_lib.add_system_event(last_room_id, msg_content)
+            ctx_lib.add_system_event(last_mode_id, msg_content)
 
-            if is_global_entry:
-                msg_key = "entry_global"
+            if is_general_entry:
+                msg_key = "entry_general"
             else:
                 msg_key = "entry_local"
 
             msg_content = get_transition_message(msg_key, current_intent, summary)
-            ctx_lib.add_system_event(current_room_id, msg_content)
+            ctx_lib.add_system_event(current_mode_id, msg_content)
 
-            rooms.clear_incoming_summary()
-            print(f">>> TRANSITION: {last_room_id} -> {current_room_id} | Goal: {new_intent} <<<\n")
+            modes.clear_incoming_summary()
+            print(f">>> MODE SWITCH: {last_mode_id} -> {current_mode_id} | Intent: {new_intent} <<<\n")
 
-            last_room_id = current_room_id
+            last_mode_id = current_mode_id
             last_intent = new_intent
             last_proactive_check = time.time()
 
-            logger.info("Starting immediate proactive thinking after entry.")
+            logger.info("Starting immediate proactive thinking after transition.")
             task_queue.put({"type": "proactive_thought"})
 
         # --- B. EVENT PROCESSING ---
@@ -180,8 +182,8 @@ def main():
             if result["type"] == "user_input":
                 last_proactive_check = time.time()
                 content = result["content"]
-                ctx_data = ctx_lib.load_context(current_room_id)
-                ctx_lib.append_entry(current_room_id, ctx_data, ctx_lib.make_entry("user", "message", content))
+                ctx_data = ctx_lib.load_context(current_mode_id)
+                ctx_lib.append_entry(current_mode_id, ctx_data, ctx_lib.make_entry("user", "message", content))
                 task_queue.put({"type": "user_message", "content": content})
 
             elif result["type"] == "llm_result":
@@ -189,12 +191,14 @@ def main():
                 data = result["data"]
                 reply = data.get("reply", "")
                 tools_to_run = data.get("tools", [])
-                r_id = result.get("room_id", current_room_id)
+
+                # UPDATED: room_id -> mode_id
+                m_id = result.get("mode_id", current_mode_id)
 
                 if reply:
-                    print(f"\n{GENERATION} ({r_id}): {textwrap.fill(reply, width=100)}\n")
-                    c_data = ctx_lib.load_context(r_id)
-                    ctx_lib.append_entry(r_id, c_data, ctx_lib.make_entry("assistant", "message", reply))
+                    print(f"\n{GENERATION} ({m_id}): {textwrap.fill(reply, width=100)}\n")
+                    c_data = ctx_lib.load_context(m_id)
+                    ctx_lib.append_entry(m_id, c_data, ctx_lib.make_entry("assistant", "message", reply))
 
                 if tools_to_run:
                     task_queue.put({"type": "tool_call", "tools": tools_to_run})
@@ -202,8 +206,8 @@ def main():
             elif result["type"] == "tool_result":
                 last_proactive_check = time.time()
                 t_results = result["data"]
-                r_id = result.get("room_id", current_room_id)
-                c_data = ctx_lib.load_context(r_id)
+                m_id = result.get("mode_id", current_mode_id)
+                c_data = ctx_lib.load_context(m_id)
 
                 # --- DYNAMIC SILENCE PROTOCOL ---
                 all_silent = all(res.get("silent", False) for res in t_results)
@@ -211,7 +215,7 @@ def main():
                 if all_silent:
                     # 1. SILENT BRANCH
                     ctx_lib.append_entry(
-                        r_id,
+                        m_id,
                         c_data,
                         ctx_lib.make_entry(
                             "tool", "tool_result",
@@ -223,20 +227,21 @@ def main():
                 else:
                     # 2. ACTIVE BRANCH
                     ctx_lib.append_entry(
-                        r_id,
+                        m_id,
                         c_data,
                         ctx_lib.make_entry("tool", "tool_result", json.dumps(t_results, ensure_ascii=False))
                     )
 
-                    # SPECIAL CASE: Room Switch
+                    # SPECIAL CASE: Mode Switch (formerly Room Switch)
                     has_real_switch = False
                     for res in t_results:
-                        if res.get("name") == "switch_room" and not res.get("silent", False):
+                        # UPDATED: switch_room -> switch_mode
+                        if res.get("name") == "flow.switch_mode" and not res.get("silent", False):
                             has_real_switch = True
                             break
 
                     if has_real_switch:
-                        logger.info("Real room switch occurred via tool. Transition handled by main loop.")
+                        logger.info("Real mode switch occurred via tool. Transition handled by main loop.")
                     else:
                         # Normal operation: Needs reaction.
                         task_queue.put({"type": "llm_call_after_tool"})

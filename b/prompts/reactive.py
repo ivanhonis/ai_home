@@ -4,7 +4,7 @@ from .common import summarize_context, build_tools_description
 
 
 def build_reactive_prompt(
-        room_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
+        mode_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
         relevant_memories: List[Dict[str, Any]],
         use_data: List[Dict[str, Any]], global_context_tail: List[Dict[str, Any]],
         local_context: List[Dict[str, Any]], user_message: Optional[str],
@@ -14,7 +14,7 @@ def build_reactive_prompt(
 ) -> str:
     # STEP 1: Load Base System
     base_system = build_base_system_prompt(
-        room_id, generation, role_name, intent, identity,
+        mode_id, generation, role_name, intent, identity,
         relevant_memories,
         use_data, global_context_tail,
         internal_plan="",
@@ -23,9 +23,10 @@ def build_reactive_prompt(
     )
 
     local_ctx_str = summarize_context(local_context, limit=300)
-    tools_desc = build_tools_description(room_id)
+    # UPDATED: Pass mode_id
+    tools_desc = build_tools_description(mode_id)
 
-    # STEP 2: Compiling the Interaction Block (The Meeting of Helper + MIND)
+    # STEP 2: Compiling the Interaction Block
     interaction_block = ""
 
     if user_message:
@@ -38,7 +39,7 @@ MESSAGE FROM HELPER:
 \"\"\"{user_message}\"\"\"
 
 [2. BACKGROUND PROCESS: MIND (INTERPRETER)]
-(Input: The message above and the current room context)
+(Input: The message above and the current mode context)
 The interpreter system logically analyzed the request to avoid misunderstandings:
 >> ESSENCE (Core of the request): {internal_essence}
 >> TECHNICAL PLAN (Suggested steps):
@@ -57,10 +58,11 @@ Based on the tool result, the interpreter suggests the following logical step:
 """
 
     # STEP 3: Concatenating the final prompt
+    # UPDATED: [CURRENT ROOM LOG] -> [CURRENT MODE LOG]
     return f"""
 {base_system}
 
-[CURRENT ROOM LOG]
+[CURRENT MODE LOG]
 {local_ctx_str}
 
 {interaction_block}
@@ -72,7 +74,8 @@ FINAL TASK:
 Respond to the Helper in the current situation!
 1. Consider the MONOLOGUE (Subconscious) hint (if any) and the RELEVANT MEMORIES.
 2. Use the MIND (Interpreter) technical plan as the logical framework for your answer.
-3. DO NOT refer to or quote internal processes (Monologue/Mind). Your response should be natural, as if these were your own thoughts.
+3. DO NOT refer to or quote internal processes (Monologue/Mind).
+Your response should be natural, as if these were your own thoughts.
 
 RESPONSE FORMAT (JSON):
 {{

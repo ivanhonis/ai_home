@@ -10,9 +10,10 @@ VECTOR_DIMENSIONS = 768  # Dimension of Google text-embedding-005
 TABLE_NAME = "memories"
 
 # List of expected columns for validation
+# UPDATED: 'room_id' replaced with 'mode_id'
 EXPECTED_COLUMNS = {
     "id",
-    "room_id",
+    "mode_id",       # Formerly room_id
     "model_version",
     "essence",
     "dominant_emotions",
@@ -80,7 +81,7 @@ def _validate_existing_schema(cur: Any) -> bool:
     if missing:
         raise RuntimeError(
             f"DATABASE SCHEMA ERROR! The table '{TABLE_NAME}' exists but columns are missing: {missing}. "
-            f"The system will NOT start for safety reasons. Manual intervention required."
+            f"If you renamed 'room_id' to 'mode_id' in the code, please rename it in the DB as well."
         )
 
     print(f"[DB] Schema validation for '{TABLE_NAME}' successful.")
@@ -90,6 +91,7 @@ def _validate_existing_schema(cur: Any) -> bool:
 def _create_schema(cur: Any) -> None:
     """
     Creates the table and indexes.
+    Updated to use mode_id.
     """
     print(f"[DB] Table '{TABLE_NAME}' does not exist. Creating...")
 
@@ -97,12 +99,11 @@ def _create_schema(cur: Any) -> None:
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
     # 2. Create Table
-    # dominant_emotions: TEXT[] (Postgres array)
-    # embedding: vector(768)
+    # UPDATED: room_id -> mode_id
     create_table_sql = f"""
     CREATE TABLE {TABLE_NAME} (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        room_id TEXT NOT NULL,
+        mode_id TEXT NOT NULL,
         model_version TEXT,
         essence TEXT,
         dominant_emotions TEXT[],
@@ -117,8 +118,8 @@ def _create_schema(cur: Any) -> None:
     cur.execute(create_table_sql)
 
     # 3. Create Indexes
-    # Fast filtering by room
-    cur.execute(f"CREATE INDEX idx_{TABLE_NAME}_room ON {TABLE_NAME}(room_id);")
+    # Fast filtering by mode
+    cur.execute(f"CREATE INDEX idx_{TABLE_NAME}_mode ON {TABLE_NAME}(mode_id);")
 
     # HNSW index for vector search (cosine similarity: vector_cosine_ops)
     cur.execute(f"""

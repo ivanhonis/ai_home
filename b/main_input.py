@@ -7,7 +7,7 @@ from typing import Dict, Any
 # --------------------------------------------------------------------
 # IMPORT MODULES
 # --------------------------------------------------------------------
-# The rooms module is necessary to print the room ID in the prompt
+# UPDATED: rooms -> modes logic via main_data
 import main_data
 
 logger = logging.getLogger(__name__)
@@ -20,14 +20,15 @@ def input_loop(result_queue: Queue):
     current_thread().name = "Input"
     logger.info("Input thread active.")
 
-    # Access rooms module from main_data
-    rooms = main_data.rooms
+    # Access modes module from main_data (was rooms)
+    modes = main_data.modes
 
     while True:
         time.sleep(0.2)
         try:
-            # Signal to write (queries current room from rooms module)
-            user_input = input(f"\n[{rooms.get_current_room_id()}] You: ").strip()
+            # Signal to write (queries current mode from modes module)
+            # UPDATED: Prompt now shows [mode_id]
+            user_input = input(f"\n[{modes.get_current_mode_id()}] You: ").strip()
 
             if user_input:
                 # Immediately put input into result_queue for processing

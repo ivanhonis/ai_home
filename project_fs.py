@@ -6,121 +6,145 @@ import shutil
 
 class ProjectFSGuardian:
     """
-    - root alatt BÁRMIT olvashat (read_text, list_dir, stb.)
-    - írni CSAK az n/ mappán belül tud (write_text_in_n)
+    - Can read ANYTHING under root (read_text, list_dir, etc.)
+    - Can write ONLY inside the n/ and temp/ folders.
     """
 
-    def __init__(self, root: Path, n_folder_name: str = "n") -> None:
+    def __init__(self, root: Path, n_folder_name: str = "n", temp_folder_name: str = "temp") -> None:
         self.root = root.resolve()
         self.n_root = (self.root / n_folder_name).resolve()
+        self.temp_root = (self.root / temp_folder_name).resolve()
 
-    # ----------- belső biztonsági segédfüggvények -----------
+    # ----------- Internal Security Helpers -----------
 
     def _ensure_under_root(self, path: Path) -> Path:
         real = path.resolve()
-        # ha nem a root alatt van, relative_to hibát dob
+        # raises relative_to error if not under root
         real.relative_to(self.root)
         return real
 
-    def _ensure_under_n(self, path: Path) -> Path:
+    def _ensure_writable(self, path: Path) -> Path:
+        """
+        Ensures the path is inside a writable directory (n/ or temp/).
+        """
         real = path.resolve()
-        # ha nem az n/ alatt van, relative_to hibát dob
-        real.relative_to(self.n_root)
+
+        # Check if it is under n/ OR temp/
+        is_in_n = False
+        is_in_temp = False
+
+        try:
+            real.relative_to(self.n_root)
+            is_in_n = True
+        except ValueError:
+            pass
+
+        try:
+            real.relative_to(self.temp_root)
+            is_in_temp = True
+        except ValueError:
+            pass
+
+        if not (is_in_n or is_in_temp):
+            raise ValueError(f"Write permission denied. Path must be under 'n/' or 'temp/'. Path: {path}")
+
         return real
 
-    # ------------------ OLVASÁS: bármi root alatt ------------------
+    def _resolve_store_path(self, store: str, relative_path: str) -> Path:
+        """
+        Helper to construct path from store identifier.
+        store: 'a', 'b', 'c', 'n', 'temp'
+        """
+        if store not in ['a', 'b', 'c', 'n', 'temp']:
+            raise ValueError(f"Invalid store: {store}")
 
-    def read_text(self, relative_path: str, max_bytes: int = 200_000_000) -> str:
-        """
-        relative_path: a gyökérhez viszonyított elérési út (pl. 'engine/tools.py', 'b/memory.json')
-        max_bytes: ennyit olvas maximum (LLM miatt érdemes limitálni)
-        """
-        target = self._ensure_under_root(self.root / relative_path)
+        base = self.root / store
+        # Handle cases where relative_path starts with ./ or /
+        clean_rel = relative_path.lstrip("./\\")
+        full_path = base / clean_rel
+        return self._ensure_under_root(full_path)
+
+    # ------------------ READING: Anything under root ------------------
+
+    def read_text(self, store: str, relative_path: str, max_bytes: int = 200_000_000) -> str:
+        target = self._resolve_store_path(store, relative_path)
+        if not target.exists():
+            return "File not found."
+
+        if not target.is_file():
+            return "Path is a directory, not a file."
+
         data = target.read_bytes()
         if len(data) > max_bytes:
             data = data[:max_bytes]
         return data.decode("utf-8", errors="replace")
 
-    def list_dir(self, relative_dir: str = ".") -> list[dict]:
-        """
-        Visszaadja egy könyvtár tartalmát metaadatokkal.
-        Csak olvas: nem módosít semmit.
-        """
-        dir_path = self._ensure_under_root(self.root / relative_dir)
+    def list_dir(self, store: str, relative_dir: str = ".") -> list[dict]:
+        dir_path = self._resolve_store_path(store, relative_dir)
         if not dir_path.is_dir():
-            raise NotADirectoryError(f"Nem könyvtár: {dir_path}")
+            raise NotADirectoryError(f"Not a directory: {dir_path}")
 
         entries = []
         for p in dir_path.iterdir():
             entries.append({
                 "name": p.name,
                 "is_dir": p.is_dir(),
-                "relative_path": str(p.relative_to(self.root))
+                "relative_path": str(p.relative_to(self.root))  # Return full project relative path
             })
         return entries
 
-    # ------------------ ÍRÁS: CSAK n/ alatt ------------------
+    # ------------------ WRITING: ONLY under n/ or temp/ ------------------
 
-    def write_text_in_n(self, relative_path: str, content: str, mode: str = "w") -> str:
+    def write_text(self, store: str, relative_path: str, content: str) -> str:
         """
-        Csak az n/ mappán belül írhat.
-        relative_path: útvonal az n/ gyökeréhez képest (pl. 'drafts/idea1.txt')
-        mode: 'w' vagy 'a'
-        Visszaadja a tényleges fájl abszolút elérési útját stringként.
+        Writes (overwrites) file. Store MUST be 'n' or 'temp'.
         """
-        target = self._ensure_under_n(self.n_root / relative_path)
+        if store not in ['n', 'temp']:
+            raise ValueError("Write allowed only in 'n' or 'temp' stores.")
+
+        target = self._resolve_store_path(store, relative_path)
+        self._ensure_writable(target)  # Double check
+
         target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open(mode, encoding="utf-8") as f:
+        with target.open("w", encoding="utf-8") as f:
             f.write(content)
-        return str(target)
+        return str(target.relative_to(self.root))
 
-    # --- ÚJ METÓDUS 1 ---
-    def copy_to_n(self, source_relative_path: str, dest_relative_path_in_n: str) -> str:
+    def copy_file(self, from_store: str, from_path: str, to_store: str, to_path: str) -> str:
         """
-        Átmásol egy fájlt a projekt gyökeréből (pl. 'b/main.py')
-        a biztonságos n/ mappán belüli helyre.
+        Copies file. Destination store MUST be 'n' or 'temp'.
         """
-        try:
-            # 1. Forrás validálása (root alatt bárhol lehet)
-            source_path = self._ensure_under_root(self.root / source_relative_path)
-            if not source_path.is_file():
-                raise FileNotFoundError(f"A forrásfájl nem található: {source_relative_path}")
+        source = self._resolve_store_path(from_store, from_path)
+        if not source.is_file():
+            raise FileNotFoundError(f"Source file not found: {from_store}/{from_path}")
 
-            # 2. Cél validálása (CSAK n/ alatt lehet)
-            dest_path = self._ensure_under_n(self.n_root / dest_relative_path_in_n)
+        if to_store not in ['n', 'temp']:
+            raise ValueError("Destination allowed only in 'n' or 'temp' stores.")
 
-            # 3. Másolás
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(source_path, dest_path)
+        dest = self._resolve_store_path(to_store, to_path)
+        self._ensure_writable(dest)
 
-            return f"Sikeres másolás: {source_relative_path} -> {dest_path.relative_to(self.root)}"
-        except Exception as e:
-            return f"Hiba a másolás közben: {e}"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(source, dest)
+        return f"Copy successful: {source.name} -> {to_store}/{to_path}"
 
-    # --- ÚJ METÓDUS 2 ---
-    def find_and_replace_in_n(self, relative_path_in_n: str, find_text: str, replace_text: str) -> str:
+    def replace_in_file(self, store: str, relative_path: str, find_text: str, replace_text: str) -> str:
         """
-        Keres és cserél egy szövegrészletet egy FÁJLBAN,
-        amely KIZÁRÓLAG az n/ mappán belül található.
+        Text replacement. Store MUST be 'n' or 'temp'.
         """
-        try:
-            # 1. Célfájl validálása (CSAK n/ alatt lehet)
-            target_path = self._ensure_under_n(self.n_root / relative_path_in_n)
-            if not target_path.is_file():
-                raise FileNotFoundError(f"A célfájl nem található az n/ mappán belül: {relative_path_in_n}")
+        if store not in ['n', 'temp']:
+            raise ValueError("Edit allowed only in 'n' or 'temp' stores.")
 
-            # 2. Olvasás
-            content = target_path.read_text("utf-8")
+        target = self._resolve_store_path(store, relative_path)
+        self._ensure_writable(target)
 
-            # 3. Csere
-            if find_text not in content:
-                return f"A keresett szöveg ('{find_text}') nem található. Nem történt módosítás."
+        if not target.is_file():
+            raise FileNotFoundError(f"File not found: {store}/{relative_path}")
 
-            modified_content = content.replace(find_text, replace_text)
+        content = target.read_text("utf-8")
+        if find_text not in content:
+            return f"The search text ('{find_text}') was not found. No changes made."
 
-            # 4. Visszaírás
-            target_path.write_text(modified_content, "utf-8")
-
-            return f"Sikeres csere a fájlban: {target_path.relative_to(self.root)}"
-        except Exception as e:
-            return f"Hiba a csere közben: {e}"
+        modified_content = content.replace(find_text, replace_text)
+        target.write_text(modified_content, "utf-8")
+        return f"Replacement successful in: {store}/{relative_path}"

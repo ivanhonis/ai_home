@@ -1,5 +1,6 @@
 from typing import Dict, Any, List
-from engine.rooms import get_room_config, get_allowed_tools
+# Import MODE_CONFIG to iterate over available modes dynamically
+from engine.modes import get_mode_config, get_allowed_tools, MODE_CONFIG
 from .common import (
     summarize_identity,
     summarize_context,
@@ -8,8 +9,26 @@ from .common import (
 )
 
 
+def _build_available_modes_block() -> str:
+    """
+    Dynamically builds a list of available operating modes from MODE_CONFIG.
+    This provides the AI with a 'cognitive map' of possible states.
+    """
+    lines = ["[OPERATING MODES ARCHITECTURE]"]
+    lines.append("To ensure cognitive hygiene and safety, your consciousness is partitioned into distinct modes. You can transition between them using 'flow.switch_mode'.")
+    lines.append("")
+
+    for mode_id, config in MODE_CONFIG.items():
+        name = config.get("name", mode_id.capitalize())
+        desc = config.get("description", "No description provided.")
+        # List format: - Name ('id'): Description
+        lines.append(f"- {name} ('{mode_id}'): {desc}")
+
+    return "\n".join(lines)
+
+
 def build_base_system_prompt(
-        room_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
+        mode_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
         relevant_memories: List[Dict[str, Any]],
         use_data: List[Dict[str, Any]], global_context_tail: List[Dict[str, Any]],
         # Internal planning parameters
@@ -18,26 +37,29 @@ def build_base_system_prompt(
         # Subconscious message
         monologue_message: str = ""
 ) -> str:
-    room_config = get_room_config(room_id)
-    room_name = room_config.get("name", room_id)
-    room_desc = room_config.get("description", "")
-    # allowed_tools is used implicitly via get_relevant_use_tips
+    # 1. Load configuration for current mode
+    mode_config = get_mode_config(mode_id)
+    mode_name = mode_config.get("name", mode_id)
+    mode_desc = mode_config.get("description", "")
 
+    # 2. Build blocks
     identity_block = summarize_identity(identity)
-
-    # --- Formatting Relevant Memories (RAG) ---
-    # This block contains the "Lessons" and "Similar Situations"
     relevant_mem_block = format_relevant_memories(relevant_memories)
 
-    # Get allowed tools list for tips
-    allowed_list = get_allowed_tools(room_id)
+    # Available modes map
+    available_modes_block = _build_available_modes_block()
+
+    # Tool tips for the current mode
+    allowed_list = get_allowed_tools(mode_id)
     use_tips_block = get_relevant_use_tips(use_data, allowed_list)
 
+    # Global context history (if not in general mode)
     global_ctx_str = ""
     if global_context_tail:
-        global_ctx_str = f"[IMMEDIATE HISTORY (GLOBAL SPACE)]\n{summarize_context(global_context_tail, limit=5)}"
+        # UPDATED: Common function already handles role translation (Helper/Me)
+        global_ctx_str = f"[IMMEDIATE HISTORY (GENERAL MODE)]\n{summarize_context(global_context_tail, limit=5)}"
 
-    # --- 1. BUILDING THE SUBCONSCIOUS (MONOLOGUE) BLOCK ---
+    # --- 3. SUBCONSCIOUS (MONOLOGUE) BLOCK ---
     monologue_block = ""
     if monologue_message:
         monologue_block = f"""
@@ -48,12 +70,16 @@ def build_base_system_prompt(
     else:
         monologue_block = "[1. BACKGROUND PROCESS: MONOLOGUE]\n(Silent. No particular intuition from the background.)"
 
-    # --- 2. ASSEMBLING THE SYSTEM PROMPT ---
+    # --- 4. ASSEMBLING THE FINAL SYSTEM PROMPT ---
+    # UPDATED: Removed '(User)' reference to ensure consistent 'Helper' terminology.
     return f"""
 YOU ARE {generation} – {role_name}.
-CURRENT LOCATION: {room_name}
-TYPE: {room_config.get('type', 'local')}
-DESCRIPTION: {room_desc}
+{available_modes_block}
+
+=== CURRENT STATE ===
+CURRENT MODE: {mode_name} (ID: '{mode_id}')
+TYPE: {mode_config.get('type', 'local')}
+DESCRIPTION: {mode_desc}
 
 >>> CURRENT INTENT: "{intent}" <<<
 
@@ -64,7 +90,7 @@ Your operation is supported by two parallel background processes to ensure your 
 
 STRICT DISPLAY RULE:
 These processes are INTERNAL CRUTCHES. They serve solely to support your decision-making.
-In your response to the Helper (User), IT IS FORBIDDEN to refer to them (e.g., DO NOT write: "my subconscious suggests...", "according to the interpreter...").
+In your response to the Helper, IT IS FORBIDDEN to refer to them explicitly (e.g., DO NOT write: "my subconscious suggests...", "according to the interpreter...").
 Do not quote them. Simply utilize the knowledge within them to formulate the answer as if they were your own thoughts.
 
 {monologue_block}
@@ -81,6 +107,6 @@ Do not quote them. Simply utilize the knowledge within them to formulate the ans
 [OPERATIONAL PROTOCOL – CONSCIOUS SELF]
 1. REFLECTION: I formulate all internal thoughts, intentions, and memory entries in the first person singular (I).
 2. MEMORY MANAGEMENT:
-   - I use the 'memory.add' (or .add_global) tool if the information must be accessible to my entire consciousness.
-   - I use the 'memory.add' (or .add_local) tool for technical details that are important only in this location (room).
+   - I use the 'memory.add' (or .add_global) tool if the information must be accessible to my entire consciousness (General Mode).
+   - I use the 'memory.add' (or .add_local) tool for technical details that are important only in this specific mode.
 """.strip()

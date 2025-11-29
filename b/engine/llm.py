@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+from datetime import datetime  # Added for timestamping
 
 # Importing external libraries
 try:
@@ -35,13 +36,54 @@ PROVIDER_CONFIG = {
         "embedding_model": "text-embedding-3-small",
         "env_key": "OPENAI_API_KEY"
     },
+    # Default Groq (fallback)
     "groq": {
         "model": "llama-3.3-70b-versatile",
+        "env_key": "GROQ_API_KEY"
+    },
+    # Specific Persona: LLAMA (Creative)
+    "groq_llama": {
+        "model": "llama-3.3-70b-versatile",
+        "env_key": "GROQ_API_KEY"
+    },
+    # Specific Persona: OSS (Logical/Alternative - using Mixtral)
+    "groq_oss": {
+        "model": "mixtral-8x7b-32768",
         "env_key": "GROQ_API_KEY"
     }
 }
 
 _ACTIVE_CLIENTS = {}
+
+
+def _save_last_call(provider: str, model: str, prompt: str, response: str):
+    """
+    Saves the content of the last LLM call to a JSON file for debugging/monitoring purposes.
+    Filename example: last_llm_call_gemini-2_0-flash.json
+    """
+    try:
+        # Clean filename (replace slashes or colons)
+        safe_model_name = model.replace("/", "_").replace(":", "_")
+        filename = f"last_llm_call_{safe_model_name}.json"
+
+        # Save to the 'b/' directory (parent of 'engine/')
+        base_dir = Path(__file__).resolve().parent.parent
+        file_path = base_dir / filename
+
+        debug_data = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "provider": provider,
+            "model": model,
+            "prompt_length": len(prompt),
+            "input_prompt": prompt,
+            "raw_response": response
+        }
+
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(debug_data, f, indent=2, ensure_ascii=False)
+
+    except Exception as e:
+        print(f"[LLM MONITOR WARNING] Failed to save debug file: {e}")
 
 
 def _load_api_key(provider: str) -> str:
@@ -71,38 +113,37 @@ def _get_client(provider: str):
     if provider in _ACTIVE_CLIENTS:
         return _ACTIVE_CLIENTS[provider]
 
+    # Handle alias providers (groq_llama -> uses groq client logic)
+    real_provider_type = "groq" if "groq" in provider else provider
+
     api_key = _load_api_key(provider)
 
-    if provider == "openai":
+    if real_provider_type == "openai":
         if OpenAI is None: raise ImportError("OpenAI module missing.")
         client = OpenAI(api_key=api_key)
-        _ACTIVE_CLIENTS["openai"] = client
+        _ACTIVE_CLIENTS[provider] = client
         return client
 
-    elif provider == "groq":
+    elif real_provider_type == "groq":
         if Groq is None: raise ImportError("Groq module missing.")
         client = Groq(api_key=api_key)
-        _ACTIVE_CLIENTS["groq"] = client
+        _ACTIVE_CLIENTS[provider] = client  # Cache by alias name to be safe
         return client
 
-    elif provider == "google":
+    elif real_provider_type == "google":
         if genai is None: raise ImportError("Google GenerativeAI module missing.")
         genai.configure(api_key=api_key)
-        _ACTIVE_CLIENTS["google"] = True
+        _ACTIVE_CLIENTS[provider] = True
         return True
 
     else:
         raise ValueError(f"Unsupported provider client init: {provider}")
 
 
-# --------------------------------------------------------------------
-# 3. Main LLM Call Function (Text Generation)
-# --------------------------------------------------------------------
 def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = True) -> Dict[str, Any]:
     """
     Unified LLM call.
-    :param json_mode: If True (default), forces JSON response.
-                      If False (e.g., chat tool), returns raw text.
+    Supports extended provider keys (e.g., 'groq_oss').
     """
     config = PROVIDER_CONFIG.get(provider)
     if not config:
@@ -111,15 +152,15 @@ def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = Tr
     model_name = config["model"]
     raw_response_text = ""
 
+    # Determine base client type
+    client_type = "groq" if "groq" in provider else provider
+
     try:
         _get_client(provider)
 
-        if provider == "openai":
-            client = _ACTIVE_CLIENTS["openai"]
-
-            # If json_mode=False, set response_format to None!
+        if client_type == "openai":
+            client = _ACTIVE_CLIENTS[provider]
             resp_format = {"type": "json_object"} if json_mode else None
-
             response = client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
@@ -128,12 +169,9 @@ def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = Tr
             )
             raw_response_text = response.choices[0].message.content
 
-        elif provider == "groq":
-            client = _ACTIVE_CLIENTS["groq"]
-
-            # If json_mode=False, set response_format to None!
+        elif client_type == "groq":
+            client = _ACTIVE_CLIENTS[provider]
             resp_format = {"type": "json_object"} if json_mode else None
-
             completion = client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
@@ -145,7 +183,7 @@ def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = Tr
             )
             raw_response_text = completion.choices[0].message.content
 
-        elif provider == "google":
+        elif client_type == "google":
             gen_config = {"temperature": 0.7}
             if json_mode:
                 gen_config["response_mime_type"] = "application/json"
@@ -157,23 +195,26 @@ def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = Tr
             response = model.generate_content(prompt)
             raw_response_text = response.text
 
+        # --- MONITORING: SAVE RAW CALL ---
+        _save_last_call(provider, model_name, prompt, raw_response_text)
+
     except Exception as e:
         return {"reply": f"CRITICAL ERROR ({provider}): {e}", "tools": []}
 
-    # ---------------------------------------------------------
     # Processing (JSON vs RAW)
-    # ---------------------------------------------------------
-
-    # If NOT in JSON mode, the full text is the response (no parsing)
     if not json_mode:
         return {"reply": raw_response_text, "tools": []}
 
-    # If JSON mode, parse it
     try:
         clean_text = raw_response_text.strip()
         if clean_text.startswith("```json"): clean_text = clean_text[7:]
         if clean_text.startswith("```"): clean_text = clean_text[3:]
         if clean_text.endswith("```"): clean_text = clean_text[:-3]
+
+        # --- FIX: SANITIZE COMMON LLM JSON ERRORS ---
+        # LLMs often use \' inside double quotes, which is invalid JSON.
+        # We replace \' with ' to fix parsing errors.
+        clean_text = clean_text.replace(r"\'", "'")
 
         data = json.loads(clean_text)
 
@@ -196,7 +237,6 @@ def get_embedding(text: str, provider: str = DEFAULT_PROVIDER) -> List[float]:
     if not text: return []
     config = PROVIDER_CONFIG.get(provider)
     if not config or "embedding_model" not in config:
-        # Fallback or error
         return []
     model_name = config["embedding_model"]
     _get_client(provider)
@@ -205,7 +245,7 @@ def get_embedding(text: str, provider: str = DEFAULT_PROVIDER) -> List[float]:
             result = genai.embed_content(model=model_name, content=text, task_type="retrieval_document")
             return result['embedding']
         elif provider == "openai":
-            client = _ACTIVE_CLIENTS["openai"]
+            client = _ACTIVE_CLIENTS[provider]
             response = client.embeddings.create(input=[text], model=model_name)
             return response.data[0].embedding
         else:

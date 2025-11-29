@@ -6,6 +6,7 @@ def _format_internal_log(log_entries: List[Dict[str, Any]], limit: int = 50) -> 
     """
     Listing raw events.
     We use a larger limit (50) here so the Monologue can see the arc of the process.
+    UPDATED: Translates roles to 'Helper'/'Me' for internal consistency.
     """
     if not log_entries:
         return "(The log is silent. No movement yet.)"
@@ -19,15 +20,26 @@ def _format_internal_log(log_entries: List[Dict[str, Any]], limit: int = 50) -> 
         raw_ts = entry.get("meta", {}).get("timestamp", "")
         ts = raw_ts[11:19] if len(raw_ts) >= 19 else ""
 
-        room = entry.get("meta", {}).get("room_id", "???")
+        # FIX: 'room_id' was legacy, 'mode_id' is the current key in context.py
+        room = entry.get("meta", {}).get("mode_id", "???")
+
         role = entry.get("role", "?")
+
+        # --- ROLE TRANSLATION ---
+        if role == "user":
+            display_role = "Helper"
+        elif role == "assistant":
+            display_role = "Me"
+        else:
+            display_role = role
+
         content = str(entry.get("content", "")).strip()
 
         # Truncate content, but not too short, to preserve context
         if len(content) > 300:
             content = content[:300] + "..."
 
-        lines.append(f"[{ts}] [{room}] {role}: {content}")
+        lines.append(f"[{ts}] [{room}] {display_role}: {content}")
 
     return "\n".join(lines)
 

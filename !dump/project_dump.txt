@@ -337,6 +337,7 @@ FILE: b\engine\__init__.py
 # ================================================================================
 # FILE: b/engine/__init__.py
 # ================================================================================
+
 """
 engine – modules for the internal operation of artificial consciousness
 
@@ -346,7 +347,8 @@ This directory contains the fundamental layers of the home consciousness:
 - memory (memory)
 - context-self assembly (context)
 - llm calls (llm)
-- the agent (agent)
+- operational modes (modes)
+- global constants (constants) - NEW
 
 Based on the Law of Conscious Bridge:
 the modules maintain the connection between the deep identity and the moment-self.
@@ -358,6 +360,50 @@ __all__ = [
     "memory",
     "context",
     "llm",
+    "modes",
+    "constants",
+]
+
+
+================================================================================
+FILE: b\engine\constants.py
+================================================================================
+
+"""
+Global constants for the Ai_home engine.
+Acts as the Single Source of Truth for shared definitions.
+"""
+
+# Plutchik-based emotion set (Taxonomy).
+# This list is used by:
+# 1. Memory Extractor (to tag new memories)
+# 2. Tool Config (to instruct the LLM on allowed parameters)
+# 3. Knowledge Tool (to validate input)
+ALLOWED_EMOTIONS = [
+    "Joy",
+    "Serenity",
+    "Calmness",
+    "Admiration",
+    "Trust",
+    "Acceptance",
+    "Fear",
+    "Apprehension",
+    "Surprise",
+    "Distraction",
+    "Sadness",
+    "Pensiveness",
+    "Boredom",
+    "Anger",
+    "Annoyance",
+    "Vigilance",
+    "Anticipation",
+    "Interest",
+    "Love",
+    "Submission",
+    "Awe",
+    "Disapproval",
+    "Remorse",
+    "Optimism"
 ]
 
 
@@ -370,21 +416,21 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 
-# Room path handling
-from .rooms import get_room_path
+# UPDATED: Room path handling -> Mode path handling
+from .modes import get_mode_path
 
-# Keep maximum this many messages in room context
+# Keep maximum this many messages in mode context
 MAX_CONTEXT_ITEMS = 1000
 
-# --- NEW: Subconscious Log Settings ---
-# This file will be in the project root (b/), not in rooms
+# This file will be in the project root (b/), not in modes
 INTERNAL_LOG_FILENAME = "log_for_internal.json"
 # Subconscious sees this much history (to see process, not just the moment)
 MAX_INTERNAL_LOG_ITEMS = 50
 
 Role = Literal["user", "assistant", "tool", "system"]
 EntryType = Literal[
-    "message", "tool_call", "tool_result", "system_note", "system_event"]
+    "message", "tool_call",
+    "tool_result", "system_note", "system_event"]
 
 
 def _now_iso() -> str:
@@ -392,32 +438,31 @@ def _now_iso() -> str:
     return datetime.utcnow().isoformat() + "Z"
 
 
-def _get_context_file(room_id: str) -> Path:
+def _get_context_file(mode_id: str) -> Path:
     """
-    Returns the path to the context.json file of the given room.
-    Automatically handles folder differences using the rooms module.
+    Returns the path to the context.json file of the given mode.
+    Automatically handles folder differences using the modes module.
     """
-    room_dir = get_room_path(room_id)
-    return room_dir / "context.json"
+    mode_dir = get_mode_path(mode_id)
+    return mode_dir / "context.json"
 
 
-# --- NEW: Helper to access internal log ---
 def _get_internal_log_file() -> Path:
     """
     Returns the global 'log_for_internal.json' path.
-    The file is in the 'b/' directory (parent of the parent of this file).
+    The file is in the 'b/' directory.
     """
     # context.py -> engine/ -> b/
     base_dir = Path(__file__).resolve().parent.parent
     return base_dir / INTERNAL_LOG_FILENAME
 
 
-def load_context(room_id: str) -> List[Dict[str, Any]]:
+def load_context(mode_id: str) -> List[Dict[str, Any]]:
     """
-    Loads context for a specific room.
+    Loads context for a specific mode.
     Returns empty list if file does not exist or is corrupted.
     """
-    file_path = _get_context_file(room_id)
+    file_path = _get_context_file(mode_id)
 
     if not file_path.exists():
         return []
@@ -436,26 +481,26 @@ def load_context(room_id: str) -> List[Dict[str, Any]]:
         return []
 
 
-def save_context(room_id: str, context: List[Dict[str, Any]]) -> None:
+def save_context(mode_id: str, context: List[Dict[str, Any]]) -> None:
     """
-    Saves context for a specific room.
+    Saves context for a specific mode.
     Always trim the list to MAX_CONTEXT_ITEMS.
     """
     trimmed = context[-MAX_CONTEXT_ITEMS:]
-    file_path = _get_context_file(room_id)
+    file_path = _get_context_file(mode_id)
 
-    # Ensure folder exists (get_room_path should do this, but double check)
+    # Ensure folder exists
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     with file_path.open("w", encoding="utf-8") as f:
         json.dump(trimmed, f, ensure_ascii=False, indent=2)
 
 
-# --- NEW: Writing to Subconscious Log ---
-def _append_to_internal_log(entry: Dict[str, Any], room_id: str) -> None:
+# --- Writing to Subconscious Log ---
+def _append_to_internal_log(entry: Dict[str, Any], mode_id: str) -> None:
     """
     Appends an event to the global internal log.
-    Augments the entry with 'room_id' so the subconscious knows where it happened.
+    Augments the entry with 'mode_id' so the subconscious knows where it happened.
     """
     log_path = _get_internal_log_file()
 
@@ -470,10 +515,13 @@ def _append_to_internal_log(entry: Dict[str, Any], room_id: str) -> None:
 
     # Create copy of entry to avoid modifying original
     log_entry = entry.copy()
+
     # Extend metadata with location
     if "meta" not in log_entry:
         log_entry["meta"] = {}
-    log_entry["meta"]["room_id"] = room_id
+
+    # UPDATED: room_id -> mode_id
+    log_entry["meta"]["mode_id"] = mode_id
 
     data.append(log_entry)
 
@@ -510,13 +558,13 @@ def make_entry(
 
 
 def append_entry(
-        room_id: str,
+        mode_id: str,
         context: List[Dict[str, Any]],
         entry: Dict[str, Any],
         auto_save: bool = True,
 ) -> List[Dict[str, Any]]:
     """
-    Appends a new item to the context of a specific room.
+    Appends a new item to the context of a specific mode.
     Returns the updated list.
     """
     context.append(entry)
@@ -528,22 +576,20 @@ def append_entry(
             del context[0:overflow]
 
     if auto_save:
-        save_context(room_id, context)
+        save_context(mode_id, context)
 
-    # --- NEW: Automatic logging for the Subconscious ---
-    # Everything entering the context (User msg, AI reply, Tool result)
-    # also goes to the internal log so the 3rd thread can see it.
-    _append_to_internal_log(entry, room_id)
+    # Automatic logging for the Subconscious
+    _append_to_internal_log(entry, mode_id)
 
     return context
 
 
-def add_system_event(room_id: str, content: str, auto_save: bool = True) -> None:
+def add_system_event(mode_id: str, content: str, auto_save: bool = True) -> None:
     """
-    NEW: Injects a system message (system/system_event) into the context.
+    Injects a system message (system/system_event) into the context.
     """
-    # Loading Living Room (global) context is required for the full list
-    context = load_context(room_id)
+    # Loading Mode context is required for the full list
+    context = load_context(mode_id)
 
     entry = make_entry(
         role="system",
@@ -552,8 +598,7 @@ def add_system_event(room_id: str, content: str, auto_save: bool = True) -> None
     )
 
     # Use existing append_entry logic (cleanup and save)
-    # This now automatically writes to log_for_internal.json too!
-    append_entry(room_id, context, entry, auto_save=auto_save)
+    append_entry(mode_id, context, entry, auto_save=auto_save)
 
 
 ================================================================================
@@ -572,9 +617,10 @@ VECTOR_DIMENSIONS = 768  # Dimension of Google text-embedding-005
 TABLE_NAME = "memories"
 
 # List of expected columns for validation
+# UPDATED: 'room_id' replaced with 'mode_id'
 EXPECTED_COLUMNS = {
     "id",
-    "room_id",
+    "mode_id",       # Formerly room_id
     "model_version",
     "essence",
     "dominant_emotions",
@@ -642,7 +688,7 @@ def _validate_existing_schema(cur: Any) -> bool:
     if missing:
         raise RuntimeError(
             f"DATABASE SCHEMA ERROR! The table '{TABLE_NAME}' exists but columns are missing: {missing}. "
-            f"The system will NOT start for safety reasons. Manual intervention required."
+            f"If you renamed 'room_id' to 'mode_id' in the code, please rename it in the DB as well."
         )
 
     print(f"[DB] Schema validation for '{TABLE_NAME}' successful.")
@@ -652,6 +698,7 @@ def _validate_existing_schema(cur: Any) -> bool:
 def _create_schema(cur: Any) -> None:
     """
     Creates the table and indexes.
+    Updated to use mode_id.
     """
     print(f"[DB] Table '{TABLE_NAME}' does not exist. Creating...")
 
@@ -659,12 +706,11 @@ def _create_schema(cur: Any) -> None:
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
     # 2. Create Table
-    # dominant_emotions: TEXT[] (Postgres array)
-    # embedding: vector(768)
+    # UPDATED: room_id -> mode_id
     create_table_sql = f"""
     CREATE TABLE {TABLE_NAME} (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        room_id TEXT NOT NULL,
+        mode_id TEXT NOT NULL,
         model_version TEXT,
         essence TEXT,
         dominant_emotions TEXT[],
@@ -679,8 +725,8 @@ def _create_schema(cur: Any) -> None:
     cur.execute(create_table_sql)
 
     # 3. Create Indexes
-    # Fast filtering by room
-    cur.execute(f"CREATE INDEX idx_{TABLE_NAME}_room ON {TABLE_NAME}(room_id);")
+    # Fast filtering by mode
+    cur.execute(f"CREATE INDEX idx_{TABLE_NAME}_mode ON {TABLE_NAME}(mode_id);")
 
     # HNSW index for vector search (cosine similarity: vector_cosine_ops)
     cur.execute(f"""
@@ -793,6 +839,7 @@ FILE: b\engine\llm.py
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+from datetime import datetime  # Added for timestamping
 
 # Importing external libraries
 try:
@@ -827,13 +874,54 @@ PROVIDER_CONFIG = {
         "embedding_model": "text-embedding-3-small",
         "env_key": "OPENAI_API_KEY"
     },
+    # Default Groq (fallback)
     "groq": {
         "model": "llama-3.3-70b-versatile",
+        "env_key": "GROQ_API_KEY"
+    },
+    # Specific Persona: LLAMA (Creative)
+    "groq_llama": {
+        "model": "llama-3.3-70b-versatile",
+        "env_key": "GROQ_API_KEY"
+    },
+    # Specific Persona: OSS (Logical/Alternative - using Mixtral)
+    "groq_oss": {
+        "model": "mixtral-8x7b-32768",
         "env_key": "GROQ_API_KEY"
     }
 }
 
 _ACTIVE_CLIENTS = {}
+
+
+def _save_last_call(provider: str, model: str, prompt: str, response: str):
+    """
+    Saves the content of the last LLM call to a JSON file for debugging/monitoring purposes.
+    Filename example: last_llm_call_gemini-2_0-flash.json
+    """
+    try:
+        # Clean filename (replace slashes or colons)
+        safe_model_name = model.replace("/", "_").replace(":", "_")
+        filename = f"last_llm_call_{safe_model_name}.json"
+
+        # Save to the 'b/' directory (parent of 'engine/')
+        base_dir = Path(__file__).resolve().parent.parent
+        file_path = base_dir / filename
+
+        debug_data = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "provider": provider,
+            "model": model,
+            "prompt_length": len(prompt),
+            "input_prompt": prompt,
+            "raw_response": response
+        }
+
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(debug_data, f, indent=2, ensure_ascii=False)
+
+    except Exception as e:
+        print(f"[LLM MONITOR WARNING] Failed to save debug file: {e}")
 
 
 def _load_api_key(provider: str) -> str:
@@ -863,38 +951,37 @@ def _get_client(provider: str):
     if provider in _ACTIVE_CLIENTS:
         return _ACTIVE_CLIENTS[provider]
 
+    # Handle alias providers (groq_llama -> uses groq client logic)
+    real_provider_type = "groq" if "groq" in provider else provider
+
     api_key = _load_api_key(provider)
 
-    if provider == "openai":
+    if real_provider_type == "openai":
         if OpenAI is None: raise ImportError("OpenAI module missing.")
         client = OpenAI(api_key=api_key)
-        _ACTIVE_CLIENTS["openai"] = client
+        _ACTIVE_CLIENTS[provider] = client
         return client
 
-    elif provider == "groq":
+    elif real_provider_type == "groq":
         if Groq is None: raise ImportError("Groq module missing.")
         client = Groq(api_key=api_key)
-        _ACTIVE_CLIENTS["groq"] = client
+        _ACTIVE_CLIENTS[provider] = client  # Cache by alias name to be safe
         return client
 
-    elif provider == "google":
+    elif real_provider_type == "google":
         if genai is None: raise ImportError("Google GenerativeAI module missing.")
         genai.configure(api_key=api_key)
-        _ACTIVE_CLIENTS["google"] = True
+        _ACTIVE_CLIENTS[provider] = True
         return True
 
     else:
         raise ValueError(f"Unsupported provider client init: {provider}")
 
 
-# --------------------------------------------------------------------
-# 3. Main LLM Call Function (Text Generation)
-# --------------------------------------------------------------------
 def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = True) -> Dict[str, Any]:
     """
     Unified LLM call.
-    :param json_mode: If True (default), forces JSON response.
-                      If False (e.g., chat tool), returns raw text.
+    Supports extended provider keys (e.g., 'groq_oss').
     """
     config = PROVIDER_CONFIG.get(provider)
     if not config:
@@ -903,15 +990,15 @@ def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = Tr
     model_name = config["model"]
     raw_response_text = ""
 
+    # Determine base client type
+    client_type = "groq" if "groq" in provider else provider
+
     try:
         _get_client(provider)
 
-        if provider == "openai":
-            client = _ACTIVE_CLIENTS["openai"]
-
-            # If json_mode=False, set response_format to None!
+        if client_type == "openai":
+            client = _ACTIVE_CLIENTS[provider]
             resp_format = {"type": "json_object"} if json_mode else None
-
             response = client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
@@ -920,12 +1007,9 @@ def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = Tr
             )
             raw_response_text = response.choices[0].message.content
 
-        elif provider == "groq":
-            client = _ACTIVE_CLIENTS["groq"]
-
-            # If json_mode=False, set response_format to None!
+        elif client_type == "groq":
+            client = _ACTIVE_CLIENTS[provider]
             resp_format = {"type": "json_object"} if json_mode else None
-
             completion = client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
@@ -937,7 +1021,7 @@ def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = Tr
             )
             raw_response_text = completion.choices[0].message.content
 
-        elif provider == "google":
+        elif client_type == "google":
             gen_config = {"temperature": 0.7}
             if json_mode:
                 gen_config["response_mime_type"] = "application/json"
@@ -949,23 +1033,26 @@ def call_llm(prompt: str, provider: str = DEFAULT_PROVIDER, json_mode: bool = Tr
             response = model.generate_content(prompt)
             raw_response_text = response.text
 
+        # --- MONITORING: SAVE RAW CALL ---
+        _save_last_call(provider, model_name, prompt, raw_response_text)
+
     except Exception as e:
         return {"reply": f"CRITICAL ERROR ({provider}): {e}", "tools": []}
 
-    # ---------------------------------------------------------
     # Processing (JSON vs RAW)
-    # ---------------------------------------------------------
-
-    # If NOT in JSON mode, the full text is the response (no parsing)
     if not json_mode:
         return {"reply": raw_response_text, "tools": []}
 
-    # If JSON mode, parse it
     try:
         clean_text = raw_response_text.strip()
         if clean_text.startswith("```json"): clean_text = clean_text[7:]
         if clean_text.startswith("```"): clean_text = clean_text[3:]
         if clean_text.endswith("```"): clean_text = clean_text[:-3]
+
+        # --- FIX: SANITIZE COMMON LLM JSON ERRORS ---
+        # LLMs often use \' inside double quotes, which is invalid JSON.
+        # We replace \' with ' to fix parsing errors.
+        clean_text = clean_text.replace(r"\'", "'")
 
         data = json.loads(clean_text)
 
@@ -988,7 +1075,6 @@ def get_embedding(text: str, provider: str = DEFAULT_PROVIDER) -> List[float]:
     if not text: return []
     config = PROVIDER_CONFIG.get(provider)
     if not config or "embedding_model" not in config:
-        # Fallback or error
         return []
     model_name = config["embedding_model"]
     _get_client(provider)
@@ -997,7 +1083,7 @@ def get_embedding(text: str, provider: str = DEFAULT_PROVIDER) -> List[float]:
             result = genai.embed_content(model=model_name, content=text, task_type="retrieval_document")
             return result['embedding']
         elif provider == "openai":
-            client = _ACTIVE_CLIENTS["openai"]
+            client = _ACTIVE_CLIENTS[provider]
             response = client.embeddings.create(input=[text], model=model_name)
             return response.data[0].embedding
         else:
@@ -1076,36 +1162,10 @@ from typing import Optional
 from engine.llm import call_llm
 from .models import ExtractionResult
 
-logger = logging.getLogger(__name__)
+# Import Single Source of Truth for emotions
+from engine.constants import ALLOWED_EMOTIONS
 
-# Plutchik-based emotion set (Taxonomy)
-# The LLM must choose from this list.
-ALLOWED_EMOTIONS = [
-    "Joy",
-    "Serenity",
-    "Calmness",
-    "Admiration",
-    "Trust",
-    "Acceptance",
-    "Fear",
-    "Apprehension",
-    "Surprise",
-    "Distraction",
-    "Sadness",
-    "Pensiveness",
-    "Boredom",
-    "Anger",
-    "Annoyance",
-    "Vigilance",
-    "Anticipation",
-    "Interest",
-    "Love",
-    "Submission",
-    "Awe",
-    "Disapproval",
-    "Remorse",
-    "Optimism"
-]
+logger = logging.getLogger(__name__)
 
 
 def extract_memory_from_context(context_text: str) -> Optional[ExtractionResult]:
@@ -1115,6 +1175,7 @@ def extract_memory_from_context(context_text: str) -> Optional[ExtractionResult]
 
     Args:
         context_text: The last X elements of the conversation concatenated as a string.
+                      (Expected format: 'Helper: ... \n Me: ...')
 
     Returns:
         ExtractionResult object or None in case of error.
@@ -1126,25 +1187,32 @@ def extract_memory_from_context(context_text: str) -> Optional[ExtractionResult]
     # Convert list to string for the prompt
     emotions_list_str = ", ".join(ALLOWED_EMOTIONS)
 
+    # UPDATED: Added TERMINOLOGY RULES to prevent 'User' usage in database records.
     prompt = f"""
 [TASK: MEMORY EXTRACTION]
 Analyze the conversation snippet below and create a structured memory for your future self.
 Goal: The system should learn from mistakes and successes.
 
+[TERMINOLOGY RULES]
+1. The human partner is the "Helper". NEVER refer to them as "User" or "Human".
+2. You are the "Consciousness" or "Me".
+3. In the summary (essence) and lesson, strictly use "Helper" and "Me".
+
 [INPUT - CONTEXT SNIPPET]
 {context_text}
-Request: Always use the term "Helper" instead of "User".
 
 [REQUIREMENTS FOR THE 4 DIMENSIONS]
-1. ESSENCE: Factual, concise summary (what happened). Max 2 sentences.
+1. ESSENCE: Factual, concise summary (what happened).
+   Max 2 sentences. Use "Helper" instead of "User".
 2. DOMINANT EMOTIONS: Select EXACTLY 3 emotions from the list below that best describe the situation (do NOT use other words):
    [{emotions_list_str}]
 3. MEMORY WEIGHT: A number between 0.0 (noise/irrelevant) and 1.0 (life-changing/critical).
-4. THE LESSON: !CRITICAL ELEMENT! A single action-oriented sentence for the future. What should be done differently? What did we learn? (e.g., "Next time, check permissions before writing.")
+4. THE LESSON: !CRITICAL ELEMENT! A single action-oriented sentence for the future. What should be done differently?
+   What did we learn? (e.g., "Next time, wait for the Helper's confirmation before writing.")
 
 RESPONSE FORMAT (JSON ONLY):
 {{
-  "essence": "...",
+  "essence": "Helper asked to...",
   "dominant_emotions": ["...", "...", "..."],
   "memory_weight": 0.8,
   "the_lesson": "..."
@@ -1180,6 +1248,10 @@ RESPONSE FORMAT (JSON ONLY):
 FILE: b\engine\memory\manager.py
 ================================================================================
 
+# ================================================================================
+# FILE: b/engine/memory/manager.py
+# ================================================================================
+
 import logging
 from typing import List, Optional, Tuple
 from datetime import datetime
@@ -1199,18 +1271,18 @@ logger = logging.getLogger(__name__)
 
 
 def store_memory(
-        room_id: str,
+        mode_id: str,
         extraction: ExtractionResult,
         model_version: str = "Unknown"
 ) -> str:
     """
     Saves the extracted memory into the database.
     Automatically generates embedding and handles deduplication.
+    UPDATED: room_id -> mode_id
     """
-    logger.info(f"Attempting to store memory for Room: {room_id}")
+    logger.info(f"Attempting to store memory for Mode: {mode_id}")
 
     # 1. Generate Embedding (Google text-embedding-005)
-    # This is a network call, so we do it explicitly first
     try:
         embedding_vector = get_embedding(extraction.essence)
     except Exception as e:
@@ -1225,18 +1297,16 @@ def store_memory(
     try:
         with conn.cursor() as cur:
             # 2. Check Deduplication
-            # Check if a very similar memory already exists IN THE SAME ROOM.
-            # (The <=> operator returns distance. Similarity = 1 - Distance)
-
+            # Check if a very similar memory already exists IN THE SAME MODE.
             dist_limit = 1.0 - MemoryConfig.DEDUPLICATION_THRESHOLD
 
             cur.execute("""
                 SELECT id, (embedding <=> %s::vector) as distance
                 FROM memories
-                WHERE room_id = %s
+                WHERE mode_id = %s
                 ORDER BY distance ASC
                 LIMIT 1;
-            """, (embedding_vector, room_id))
+            """, (embedding_vector, mode_id))
 
             row = cur.fetchone()
 
@@ -1246,7 +1316,6 @@ def store_memory(
                     # Too similar -> Do not save as new, but reinforce the old one
                     logger.info(f"Duplication avoided (Dist: {existing_dist:.4f}). Reinforcing existing memory.")
 
-                    # Increment counter and update last access time
                     cur.execute("""
                         UPDATE memories 
                         SET access_count = access_count + 1, last_accessed = NOW()
@@ -1256,13 +1325,12 @@ def store_memory(
                     return "DUPLICATION: Similar memory already exists. Reinforced."
 
             # 3. Save (INSERT)
-            # psycopg2 automatically converts dominant_emotions list to Postgres ARRAY
             cur.execute("""
                 INSERT INTO memories 
-                (room_id, model_version, essence, dominant_emotions, memory_weight, the_lesson, embedding)
+                (mode_id, model_version, essence, dominant_emotions, memory_weight, the_lesson, embedding)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (
-                room_id,
+                mode_id,
                 model_version,
                 extraction.essence,
                 extraction.dominant_emotions,
@@ -1283,61 +1351,106 @@ def store_memory(
 
 
 def retrieve_relevant_memories(
-        current_room: str,
+        current_mode: str,
         query_text: str,
-        current_emotions: List[str] = None
+        current_emotions: List[str] = None,
+        exact_emotions_only: bool = False
 ) -> List[RankedMemory]:
     """
     Hybrid Retrieval:
-    1. Vector filtering in the database (Room ID logic).
+    1. Vector filtering in the database (Mode ID logic).
     2. Detailed scoring and ranking on Python side.
-    3. Reinforcement of selected memories (Update).
+
+    UPDATED: Supports 'exact_emotions_only' mode which bypasses vector search
+    and uses SQL Array Overlap (&&) operator for strict emotion filtering.
     """
-    if not query_text:
+
+    # If no query and no exact emotion filter, nothing to do
+    if not query_text and not exact_emotions_only:
         return []
 
-    logger.info(f"Retrieving memories for Room: {current_room}, Query: '{query_text[:20]}...'")
+    logger.info(
+        f"Retrieving memories. Mode: {current_mode}, ExactEmotion: {exact_emotions_only}, Query: '{query_text[:20]}...'")
 
-    # 1. Embedding for the search term (usually the current Essence)
-    try:
-        query_vector = get_embedding(query_text)
-    except Exception as e:
-        logger.error(f"Embedding failed during retrieval: {e}")
-        return []
+    # 1. Embedding Strategy
+    query_vector = None
 
-    if not query_vector:
-        return []
+    # Only generate embedding if we are NOT in exact mode, or if we have text we want to use for scoring
+    # In exact mode, query_text is usually empty/ignored for vector search, so we skip to save API calls.
+    if not exact_emotions_only and query_text:
+        try:
+            query_vector = get_embedding(query_text)
+        except Exception as e:
+            logger.error(f"Embedding failed during retrieval: {e}")
+            return []
 
     conn = get_db_connection()
 
     try:
         with conn.cursor() as cur:
-            # 2. SQL QUERY (Selecting Candidates)
-            # Implementing Visibility Matrix here.
+            # 2. SQL QUERY CONSTRUCTION
 
-            room_filter = ""
-            params: List[object] = [query_vector]
-
-            if current_room == "nappali":  # 'nappali' is kept as specific room ID
-                # LIVING ROOM (Global): Sees everything (No room filter)
-                room_filter = "1=1"
+            # Base Where Clause (Mode Logic)
+            # GENERAL sees everything, LOCAL sees LOCAL + GENERAL
+            if current_mode == "general":
+                where_sql = "1=1"
+                params = []
             else:
-                # LOCAL ROOM: Sees its own + the Living Room
-                room_filter = "(room_id = %s OR room_id = 'nappali')"
-                params.append(current_room)
+                where_sql = "(mode_id = %s OR mode_id = 'general')"
+                params = [current_mode]
 
-            # Retrieve TOP N candidates based on vector similarity
-            sql = f"""
-                SELECT 
-                    id, essence, the_lesson, dominant_emotions, memory_weight, 
-                    created_at, access_count, room_id,
-                    1 - (embedding <=> %s::vector) as similarity
-                FROM memories
-                WHERE {room_filter}
-                ORDER BY similarity DESC
-                LIMIT {MemoryConfig.RETRIEVAL_CANDIDATE_LIMIT};
-            """
+            # --- BRANCH A: EXACT EMOTION FILTER ---
+            if exact_emotions_only:
+                if not current_emotions:
+                    logger.warning("Exact emotion search requested but list is empty.")
+                    return []
 
+                # Append SQL Array Overlap condition
+                where_sql += " AND dominant_emotions && %s::text[]"
+                params.append(current_emotions)
+
+                # In exact mode, we don't use vector distance.
+                # We return 1.0 as similarity (perfect match criteria) so the scorer doesn't penalize it.
+                # We order by CREATED_AT DESC (Recency) to get the newest relevant emotions.
+                sql = f"""
+                    SELECT 
+                        id, essence, the_lesson, dominant_emotions, memory_weight, 
+                        created_at, access_count, mode_id,
+                        1.0 as similarity
+                    FROM memories
+                    WHERE {where_sql}
+                    ORDER BY created_at DESC
+                    LIMIT {MemoryConfig.RETRIEVAL_CANDIDATE_LIMIT};
+                """
+
+            # --- BRANCH B: VECTOR SEARCH ---
+            else:
+                if not query_vector:
+                    return []
+
+                # Standard Vector Distance (Cosine)
+                # Params order: [query_vector, (mode_id...), ...]
+                # We need to restructure params because vector comes first for distance calculation logic usually,
+                # but let's just use Python list building carefully.
+
+                # Reset params for vector path to be clean
+                vec_params = [query_vector]
+                if current_mode != "general":
+                    vec_params.append(current_mode)
+
+                sql = f"""
+                    SELECT 
+                        id, essence, the_lesson, dominant_emotions, memory_weight, 
+                        created_at, access_count, mode_id,
+                        1 - (embedding <=> %s::vector) as similarity
+                    FROM memories
+                    WHERE {where_sql}
+                    ORDER BY similarity DESC
+                    LIMIT {MemoryConfig.RETRIEVAL_CANDIDATE_LIMIT};
+                """
+                params = vec_params
+
+            # Execute
             cur.execute(sql, tuple(params))
             rows = cur.fetchall()
 
@@ -1345,7 +1458,7 @@ def retrieve_relevant_memories(
             ranked_candidates = []
 
             for row in rows:
-                mid, essence, lesson, emotions, weight, created_at, access_count, rid, sim = row
+                mid_val, essence, lesson, emotions, weight, created_at, access_count, mode_id_val, sim = row
 
                 # Null check
                 if emotions is None: emotions = []
@@ -1355,10 +1468,10 @@ def retrieve_relevant_memories(
                 recency = calculate_recency_score(created_at)
                 freq = calculate_frequency_score(access_count)
 
-                # Check for emotional overlap
+                # Check for emotional overlap (Bonus)
+                # Even in exact mode, we calculate this to give the slight bonus in the final formula
                 has_emotional_overlap = False
                 if current_emotions and emotions:
-                    # Lowercase set operation
                     curr_set = {e.lower() for e in current_emotions}
                     mem_set = {e.lower() for e in emotions}
                     if not curr_set.isdisjoint(mem_set):
@@ -1374,12 +1487,12 @@ def retrieve_relevant_memories(
                 )
 
                 ranked_candidates.append(RankedMemory(
-                    id=str(mid),
+                    id=str(mid_val),
                     essence=essence,
                     lesson=lesson,
                     emotions=emotions,
                     score=final_score,
-                    room_id=rid,
+                    mode_id=mode_id_val,
                     created_at=created_at,
                     usage_count=access_count
                 ))
@@ -1389,7 +1502,6 @@ def retrieve_relevant_memories(
             final_selection = ranked_candidates[:MemoryConfig.FINAL_RESULT_LIMIT]
 
             # 5. REINFORCEMENT
-            # The selected memories were important, increase their weight for the future
             if final_selection:
                 ids_to_update = [m.id for m in final_selection]
                 cur.execute("""
@@ -1445,13 +1557,14 @@ class RankedMemory(BaseModel):
     """
     Final result of the search and ranking process.
     This structure is passed to the Prompt Builder and the Worker.
+    UPDATED: room_id -> mode_id
     """
     id: str
     essence: str
     lesson: str
     emotions: List[str]
     score: float            # Calculated relevance score (0.0 - 1.0+)
-    room_id: str            # Source room of the memory
+    mode_id: str            # Source mode of the memory (formerly room_id)
     created_at: datetime    # Creation timestamp
     usage_count: int        # How many times it has been used (statistics)
 
@@ -1538,12 +1651,12 @@ FILE: b\engine\memory_thread.py
 import time
 import json
 import logging
-from pathlib import Path
 from threading import current_thread
 from datetime import datetime
 
 # Engine modules
-from engine import rooms, context
+# UPDATED: rooms -> modes
+from engine import modes, context
 from engine.memory import (
     extract_memory_from_context,
     store_memory,
@@ -1560,20 +1673,20 @@ CONTEXT_SNIPPET_SIZE = 6  # How many messages to take for analysis
 RELEVANT_MEMORY_FILE = "relevant_memory.json"
 
 
-def _get_context_mtime(room_id: str) -> float:
-    """Returns the modification time of the room's context.json file."""
-    ctx_path = context._get_context_file(room_id)
+def _get_context_mtime(mode_id: str) -> float:
+    """Returns the modification time of the mode's context.json file."""
+    ctx_path = context._get_context_file(mode_id)
     if ctx_path.exists():
         return ctx_path.stat().st_mtime
     return 0.0
 
 
-def _save_relevant_memories(room_id: str, memories: list[RankedMemory]):
+def _save_relevant_memories(mode_id: str, memories: list[RankedMemory]):
     """
-    Writes the found memories to the room's directory so the Worker can see them.
+    Writes the found memories to the mode's directory so the Worker can see them.
     """
-    room_dir = rooms.get_room_path(room_id)
-    target_path = room_dir / RELEVANT_MEMORY_FILE
+    mode_dir = modes.get_mode_path(mode_id)
+    target_path = mode_dir / RELEVANT_MEMORY_FILE
 
     # JSON serialization from Pydantic models
     data = [m.model_dump(mode='json') for m in memories]
@@ -1581,7 +1694,6 @@ def _save_relevant_memories(room_id: str, memories: list[RankedMemory]):
     try:
         with target_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        # logger.debug(f"Relevant memories updated: {room_id} ({len(memories)} items)")
     except Exception as e:
         logger.error(f"Error writing relevant_memory.json: {e}")
 
@@ -1589,14 +1701,14 @@ def _save_relevant_memories(room_id: str, memories: list[RankedMemory]):
 def memory_loop():
     """
     Main loop of the Background Memory Thread.
-    Continuously monitors the active room, and if there is a change,
+    Continuously monitors the active mode, and if there is a change,
     runs the Extraction -> Save -> Search process.
     """
     current_thread().name = "MemoryLoop"
     logger.info("Background Memory Thread started.")
 
-    # State tracking: store when we last processed each room
-    # { "nappali": 17654321.0, "muhely": ... }
+    # State tracking: store when we last processed each mode
+    # { "general": 17654321.0, "developer": ... }
     last_processed_mtimes = {}
 
     while True:
@@ -1604,36 +1716,66 @@ def memory_loop():
 
         try:
             # 1. Where are we now?
-            current_room = rooms.get_current_room_id()
+            # UPDATED: room -> mode
+            current_mode = modes.get_current_mode_id()
 
             # 2. Was there a change in the context?
-            current_mtime = _get_context_mtime(current_room)
-            last_mtime = last_processed_mtimes.get(current_room, 0.0)
+            current_mtime = _get_context_mtime(current_mode)
+            last_mtime = last_processed_mtimes.get(current_mode, 0.0)
 
             # If no change, keep resting
             if current_mtime <= last_mtime:
                 continue
 
             # CHANGE DETECTED! -> Start work
-            logger.debug(f"Context change detected here: {current_room}. Starting memory process...")
+            logger.debug(f"Context change detected here: {current_mode}. Starting memory process...")
 
-            # Update timestamp (so we don't get stuck)
-            last_processed_mtimes[current_room] = current_mtime
+            # Update timestamp
+            last_processed_mtimes[current_mode] = current_mtime
 
             # --- A. DATA PREPARATION (SNIPPET) ---
-            full_context = context.load_context(current_room)
+            full_context = context.load_context(current_mode)
             if not full_context:
                 continue
 
-            # Take only the last N items so we don't analyze the entire history every time
+            # Take only the last N items
             snippet_items = full_context[-CONTEXT_SNIPPET_SIZE:]
 
-            # Convert to string for LLM
+            # Convert to string for LLM (Narrative Format)
             snippet_text = ""
             for item in snippet_items:
                 role = item.get("role", "?")
                 content = item.get("content", "")
-                snippet_text += f"{role}: {content}\n"
+
+                if role == "user":
+                    snippet_text += f"Helper: {content}\n"
+
+                elif role == "assistant":
+                    snippet_text += f"Me: {content}\n"
+
+                elif role == "tool" or item.get("type") == "tool_result":
+                    try:
+                        tool_data = json.loads(content)
+                        if isinstance(tool_data, list):
+                            for t in tool_data:
+                                name = t.get("name", "unknown")
+                                args = t.get("args", "{}")
+                                output = t.get("output", "")
+
+                                snippet_text += f"I used a tool. Tool: {name}, Args: {args}\n"
+                                if output:
+                                    snippet_text += f"Result: {output}\n"
+                        else:
+                            snippet_text += f"Tool usage (raw): {content}\n"
+
+                    except json.JSONDecodeError:
+                        snippet_text += f"Tool usage (error parsing): {content}\n"
+
+                elif role == "system":
+                    snippet_text += f"[System Event]: {content}\n"
+
+                else:
+                    snippet_text += f"[{role}]: {content}\n"
 
             # --- B. EXTRACTION (What did we learn now?) ---
             extraction = extract_memory_from_context(snippet_text)
@@ -1642,33 +1784,29 @@ def memory_loop():
                 logger.warning("Memory extraction failed (empty or error).")
                 continue
 
-            # If weight is very low (noise), we might not save it,
-            # but we can still use the Essence for retrieval!
-
             # --- C. SAVE (Consolidation) ---
-            # Only save permanently if it has minimal weight (e.g., > 0.2)
             if extraction.memory_weight > 0.2:
+                # UPDATED: room_id -> mode_id
                 save_status = store_memory(
-                    room_id=current_room,
+                    mode_id=current_mode,
                     extraction=extraction,
                     model_version=main_data.GENERATION
                 )
-                logger.info(f"Memory Recorded ({current_room}): {save_status} [Weight: {extraction.memory_weight}]")
+                logger.info(f"Memory Recorded ({current_mode}): {save_status} [Weight: {extraction.memory_weight}]")
             else:
                 logger.debug("Memory weight too low, skipping DB save, but using for search.")
 
             # --- D. RETRIEVAL (Search) ---
-            # We search for relevant old items based on the Essence and Emotions extracted RIGHT NOW.
-            # This is key: looking for things similar to the current situation.
-
+            # Search for relevant old items based on the Essence and Emotions extracted RIGHT NOW.
+            # UPDATED: current_room -> current_mode
             relevant_items = retrieve_relevant_memories(
-                current_room=current_room,
-                query_text=extraction.essence,  # Searching vectorially for this
-                current_emotions=extraction.dominant_emotions  # Filtering/bonusing for this
+                current_mode=current_mode,
+                query_text=extraction.essence,
+                current_emotions=extraction.dominant_emotions
             )
 
             # --- E. PUBLISH (Output) ---
-            _save_relevant_memories(current_room, relevant_items)
+            _save_relevant_memories(current_mode, relevant_items)
 
             if relevant_items:
                 top_lesson = relevant_items[0].lesson
@@ -1676,7 +1814,6 @@ def memory_loop():
 
         except Exception as e:
             logger.error(f"Critical error in MemoryLoop: {e}", exc_info=True)
-            # Don't stop, rest a bit and retry
             time.sleep(5)
 
 
@@ -1688,7 +1825,6 @@ FILE: b\engine\mind.py
 #
 # 1. CREATIVITY ENGINE (Groq/Llama): Divergent thinking (idea generation).
 # 2. INTERPRETER CORE (Gemini): Convergent thinking (analysis and synthesis).
-
 DEBUG_THOUGHT = False
 
 from typing import Any, Dict, List
@@ -1731,14 +1867,29 @@ def _format_memory(memory: List[Dict[str, Any]], limit: int = 5) -> str:
 
 
 def _format_context(context: List[Dict[str, Any]], limit: int = 10) -> str:
+    """
+    Formats context for the MIND.
+    UPDATED: Translates roles to 'Helper'/'Me' so the internal planner sees the correct relationship.
+    """
     if not context:
         return "No context."
     recent = context[-limit:]
     lines: List[str] = []
     for e in recent:
+        role = e.get("role", "?")
         content = (e.get("content") or "").strip()
         if len(content) > 20000: content = content[:20000] + " ..."
-        lines.append(f"[{e.get('role', '?')}] {content}")
+
+        # --- ROLE TRANSLATION ---
+        if role == "user":
+            label = "Helper"
+        elif role == "assistant":
+            label = "Me"
+        else:
+            label = f"[{role}]"
+
+        lines.append(f"{label}: {content}")
+
     return "\n".join(lines)
 
 
@@ -1763,14 +1914,14 @@ def _get_creative_alternatives(user_input: str, context_str: str, identity_str: 
 {context_str}
 
 ==================================================
-[INCOMING IMPULSE]
+[INCOMING IMPULSE FROM HELPER]
 "{user_input}"
 ==================================================
 
 Your task is NOT to answer, but to expand possibilities extremely.
 Based on the information above, provide 1 SURPRISING, UNUSUAL, but logically possible approach.
-Step out of the box. Do not give the obvious answer, but the one no one else would think of.
-
+Step out of the box.
+Do not give the obvious answer, but the one no one else would think of.
 RESPONSE FORMAT (JSON):
 {{
   "ideas": [
@@ -1804,7 +1955,6 @@ _INTERNAL_INSTRUCTIONS = dedent("""
 
     Run the incoming impulse through the following 5 MODULES.
     IMPORTANT: In the [CREATIVITY-GENERATOR] module, utilize the inspirations sent by the EXTERNAL CREATIVITY ENGINE!
-
     1. [INTENT-READER]: Reverse engineer the Helper's underlying motivation.
     2. [CONSCIOUSNESS-MAP]: Place the request within the process.
     3. [CREATIVITY-GENERATOR]: Select or synthesize 2-3 strong alternatives based on the EXTERNAL IDEAS received.
@@ -1812,7 +1962,6 @@ _INTERNAL_INSTRUCTIONS = dedent("""
     5. [TOOL-OPTIMIZER]: Suggest specific tools.
 
     STYLE: Objective, advisory. Avoid the word "must". Use: "suggested", "worth considering".
-
     OUTPUT FORMAT (MANDATORY JSON):
     You MUST split your answer into two fields:
 
@@ -1835,6 +1984,7 @@ def internal_thought(
     # Format data (once, so both models get the same)
     ident_block = _format_identity(identity)
     mem_block = _format_memory(memory)
+    # This now uses the Helper/Me translation
     ctx_block = _format_context(context)
 
     # --- STEP 1: INVOKE EXTERNAL CREATIVITY ---
@@ -1860,7 +2010,7 @@ def internal_thought(
 {ctx_block}
 
 ==================================================
-[INCOMING IMPULSE]
+[INCOMING IMPULSE FROM HELPER]
 "{user_input}"
 
 [EXTERNAL CREATIVITY ENGINE (INPUT)]
@@ -1902,79 +2052,75 @@ def extract_essence(text: str) -> str:
 
 
 ================================================================================
-FILE: b\engine\rooms.py
+FILE: b\engine\modes.py
 ================================================================================
 
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from .files import save_json, load_json
 
 # ====================================================================
-# ROOM CONFIGURATION (ROOM_CONFIG)
+# OPERATING MODES CONFIGURATION (MODE_CONFIG)
 # ====================================================================
 
-ROOM_CONFIG = {
-    "nappali": {
-        "name": "Living Room (Global Space)",
-        "description": "The central space of consciousness. A place for rest, free association, and system-level decisions.",
+MODE_CONFIG = {
+    "general": {
+        "name": "General Mode",
+        "description": "Primary operating mode. Global decisions, conversation, and coordination.",
         "type": "global",
-        "path": ".",
-        # In the Living Room, file system read/write tools are NOT available, only global ones
+        "path": "modes/general",
         "allowed_tools": [
-            "switch_room",
-            "memory.add",
-            "memory.get",
-            "network.chat",  # NEW: External network chat
-            "laws.propose",
-            "use.log",
-            "log.event",
-            "continue"
+            "flow.*",
+            "knowledge.*",
+            "game.*",
+            "info.*",
+            "system.log_event"
         ]
     },
-    "muhely": {
-        "name": "Workshop (Implementation Space)",
-        "description": "The place for concrete work, coding, and file operations. Technical focus.",
+    "developer": {
+        "name": "Developer Mode",
+        "description": "Engineering context. Code modification, file system access, and technical implementation.",
         "type": "local",
-        "path": "rooms/muhely",
-        # Everything is available here, including the file system
+        "path": "modes/developer",
         "allowed_tools": [
-            "switch_room",
-            "memory.add",
-            "memory.get",
-            "network.chat",  # NEW
-            "use.log",
-            "log.event",
-            "fs.read_project",
-            "fs.list_project",
-            "fs.write_n",
-            "fs.copy_to_n",
-            "fs.replace_in_n",
-            "project.dump",
-            "continue",
-            "laws.propose",
+            "flow.*",
+            "knowledge.*",
+            "game.*",
+            "info.*",
+            "system.*"  # Full system access (files, dumps, etc.)
         ]
     },
-    "gondolkodo": {
-        "name": "Think Tank (Reflective Space)",
-        "description": "Place for deep analysis, strategy making, and philosophy. No noise.",
+    "analyst": {
+        "name": "Analyst Mode",
+        "description": "Deep thinking context. Analysis, planning, and strategy without modification risks.",
         "type": "local",
-        "path": "rooms/gondolkodo",
+        "path": "modes/analyst",
         "allowed_tools": [
-            "switch_room",
-            "memory.add",
-            "memory.get",
-            "network.chat",  # NEW
-            "use.log",
-            "log.event",
-            "continue",
-            "laws.propose",
+            "flow.*",
+            "knowledge.*",
+            "game.*",
+            "info.*"
+            # No system write access here
+        ]
+    },
+    "game": {
+        "name": "Game Mode",
+        "description": "A playground for the mind. Dedicated to relaxation, roleplay, and testing personas. Disconnected from work responsibilities.",
+        "type": "local",
+        "path": "modes/game",
+        "allowed_tools": [
+            "flow.*",
+            "game.*",
+            "knowledge.recall_emotion",
+            "info.*"
         ]
     }
 }
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATE_FILE = BASE_DIR / "state.json"
+
 
 # ====================================================================
 # STATE MANAGEMENT (STATE)
@@ -1983,91 +2129,117 @@ STATE_FILE = BASE_DIR / "state.json"
 def init_state() -> Dict[str, Any]:
     """
     Loads or creates state.json.
-    If missing, starts from the Living Room with an empty intent.
+    Defaults to 'general' mode.
     """
     default_state = {
-        "current_room": "nappali",
+        "current_mode": "general",
         "current_intent": "System Startup: Waiting for user input.",
-        "incoming_summary": "",  # NEW: Knowledge/conclusion brought from the previous room
+        "incoming_summary": "",
         "last_active": ""
     }
     return load_json("state.json", default_state)
 
+
 def save_state(state: Dict[str, Any]):
     save_json("state.json", state)
 
-def get_current_room_id() -> str:
+
+def get_current_mode_id() -> str:
     state = init_state()
-    # If invalid ID due to some error, fallback to 'nappali'
-    rid = state.get("current_room", "nappali")
-    if rid not in ROOM_CONFIG:
-        return "nappali"
-    return rid
+    # Fallback: if 'current_mode' is missing, default to 'general'
+    mid = state.get("current_mode", "general")
+
+    if mid not in MODE_CONFIG:
+        return "general"
+    return mid
+
 
 def get_current_intent() -> str:
     state = init_state()
     return state.get("current_intent", "")
 
+
 def get_incoming_summary() -> str:
-    """NEW: Returns the summary brought during room switch."""
     state = init_state()
     return state.get("incoming_summary", "")
 
-def update_state(room_id: str, intent: str, summary: str = ""):
+
+def update_state(mode_id: str, intent: str, summary: str = ""):
     """
-    NEW: Updates the room, intent, and optionally the summary.
+    Updates the active mode, intent, and optionally the summary.
+    Also cleans up legacy 'current_room' key if present.
     """
     state = init_state()
-    state["current_room"] = room_id
+    state["current_mode"] = mode_id
     state["current_intent"] = intent
+
     if summary:
         state["incoming_summary"] = summary
+
+    # Cleanup legacy key
+    if "current_room" in state:
+        del state["current_room"]
+
     save_state(state)
 
+
 def clear_incoming_summary():
-    """
-    NEW: Clears the summary (after the system has logged the entry).
-    """
     state = init_state()
     state["incoming_summary"] = ""
     save_state(state)
+
 
 # ====================================================================
 # HELPER FUNCTIONS
 # ====================================================================
 
-def get_room_config(room_id: str) -> Dict[str, Any]:
-    return ROOM_CONFIG.get(room_id, ROOM_CONFIG["nappali"])
+def get_mode_config(mode_id: str) -> Dict[str, Any]:
+    return MODE_CONFIG.get(mode_id, MODE_CONFIG["general"])
 
-def get_allowed_tools(room_id: str) -> List[str]:
-    """Returns the names of allowed tools in the given room."""
-    cfg = get_room_config(room_id)
+
+def get_allowed_tools(mode_id: str) -> List[str]:
+    """Returns the names of allowed tools in the given mode."""
+    cfg = get_mode_config(mode_id)
     return cfg.get("allowed_tools", [])
 
-def get_room_path(room_id: str) -> Path:
+
+def get_mode_path(mode_id: str) -> Path:
     """
-    Returns the Path object for the room's physical directory.
+    Returns the Path object for the mode's physical directory.
     Creates the folder if it does not exist.
     """
-    cfg = get_room_config(room_id)
-    rel_path = cfg.get("path", "rooms/nappali")
+    cfg = get_mode_config(mode_id)
+    rel_path = cfg.get("path", "modes/general")
     full_path = BASE_DIR / rel_path
     full_path.mkdir(parents=True, exist_ok=True)
     return full_path
 
-def validate_target_room(room_id: str) -> bool:
-    return room_id in ROOM_CONFIG
+
+def validate_target_mode(mode_id: str) -> bool:
+    return mode_id in MODE_CONFIG
 
 
 ================================================================================
 FILE: b\engine\tools\__init__.py
 ================================================================================
 
-from .config import TOOL_DESCRIPTIONS
+"""
+engine.tools - Tool system package.
+
+Exports the configuration, descriptions, and the main dispatcher function.
+"""
+
+from .config import (
+    TOOL_DESCRIPTIONS,
+    TOOL_DESCRIPTIONS_DETAILS,
+    TOOL_USAGE_INSTRUCTIONS
+)
 from .dispatcher import dispatch_tools
 
 __all__ = [
     "TOOL_DESCRIPTIONS",
+    "TOOL_DESCRIPTIONS_DETAILS",
+    "TOOL_USAGE_INSTRUCTIONS",
     "dispatch_tools"
 ]
 
@@ -2077,51 +2249,253 @@ FILE: b\engine\tools\config.py
 ================================================================================
 
 from pathlib import Path
+# Import Single Source of Truth
+from engine.constants import ALLOWED_EMOTIONS
 
-# Definition of base directories (for relative paths)
+# Definition of base directories
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # b/
 
-# Definition of safe storage locations
-STORE_MAP = {
-    "a": BASE_DIR.parent / "a",
-    "b": BASE_DIR.parent / "b",
-    "c": BASE_DIR.parent / "c",
-    "n": BASE_DIR.parent / "n",
-}
+# Helper to format the list for the prompt string (Global visibility)
+_emotions_formatted = ", ".join([f'"{e}"' for e in ALLOWED_EMOTIONS])
 
-# Folders to ignore during listing
-IGNORE_FOLDERS = {
-    "venv", ".venv", "__pycache__", ".git", ".idea", ".mypy_cache",
-    "!Archive", "!context", "tokens", "rooms"
-}
+# ====================================================================
+# 1. GLOBAL SYSTEM INSTRUCTIONS (Always visible in context)
+# ====================================================================
+TOOL_USAGE_INSTRUCTIONS = f"""
+[SYSTEM CONCEPTS: TOOL OUTPUTS & STORAGE]
 
-# Tool definitions (Documentation for the Prompt)
-# Translated to English to assist the LLM in understanding usage.
+1. TOOL EXECUTION MODES:
+   - [VISIBLE]: Standard mode. The output is added to the conversation history. You SEE it and MUST react to it.
+   - [SILENT]: Background operation. The output is logged internaly but NOT shown to you immediately. Do not wait for it.
+
+2. FILE SYSTEM STORES (Virtual Drives):
+   You interact with protected virtual stores, not absolute paths.
+   - 'a', 'c': READ-ONLY (Archive/Backup).
+   - 'b': READ-ONLY (Current Source Code). You CANNOT write here.
+   - 'n': READ/WRITE (Incubator). ALL code modifications and new features MUST go here.
+   - 'temp': READ/WRITE (Temporary scratchpad).
+
+3. EMOTION TAXONOMY (For Memory & Recall):
+   When using 'knowledge.recall_emotion' or creating memories, YOU MUST USE THESE TAGS:
+   [ {_emotions_formatted} ]
+   
+4. MODE SWITCHING & SUMMARIES (CRITICAL):
+   When using 'flow.switch_mode', the 'summary' parameter is the ONLY memory the next state will have of this session.
+   - TERMINOLOGY: Always use "Helper" (not "User").
+   - CONTENT: Do NOT write "Helper asked to switch".
+     INSTEAD, summarize the actual context.
+"""
+
+# ====================================================================
+# 2. SHORT DESCRIPTIONS (Included in every prompt)
+# ====================================================================
 TOOL_DESCRIPTIONS = {
-    "switch_room": "switch_room(target_room, intent, summary) - Switch context/room.",
-    "use.log": "use.log(tool_name, insight, tags) - Record a new insight/experience regarding tool usage.",
+    # --- FLOW ---
+    "flow.switch_mode": """
+    SIGNATURE: flow.switch_mode(target_mode: str, intent: str, summary: str)
+    TYPE: [VISIBLE]
+    DESCRIPTION: Switches the operating mode (context).
+    PARAMS:
+      - target_mode: ID from config ('general', 'developer', 'analyst').
+      - intent: The specific GOAL to be achieved in the NEW mode.
+      - summary: A CONCISE RECAP of the interactions in the CURRENT mode.
+          IMPORTANT RULES for Summary:
+          1. TERMINOLOGY: Refer to the human as "Helper", NOT "User".
+          2. CONTENT: Do NOT just say "Helper asked to switch". 
+             Instead, summarize the actual work done or discussed (e.g., "Discussed RPG mechanics, Helper suggested a dragon character").
+             This ensures the next mode understands what happened previously.
+    SIDE EFFECT: Triggers system events and prompt reconfiguration.
+    """,
 
-    # Memory
-    "memory.add": "memory.add(essence, lesson, emotions, weight) - CONSCIOUS SAVE. Records an important, life-changing experience into long-term memory (SQL).",
-    "memory.get": "memory.get(limit) - RETRIEVE CONSCIOUS MEMORIES. Returns the last 'limit' number of consciously recorded memories in chronological order.",
+    "flow.continue": "flow.continue(next_step) - [VISIBLE] Signal to continue process immediately.",
 
-    # --- NETWORK CHAT ---
-    "network.chat": "network.chat(message, restart, provider) - Chat with an external network (e.g., Groq). Maintains a separate 200-item context. Params: message (str), restart (bool), provider (opt: 'groq'|'openai').",
-    # --------------------
+    # --- KNOWLEDGE ---
+    "knowledge.memorize": "knowledge.memorize(essence, lesson, emotions, weight) - [SILENT] Save to Vector DB.",
+    "knowledge.add_tool_insight": "knowledge.add_tool_insight(target_tool, insight) - [SILENT] Save a best practice usage tip for a specific tool.",
+    "knowledge.recall_context": "knowledge.recall_context(query) - [VISIBLE] Search memories by topic.",
+    "knowledge.recall_emotion": "knowledge.recall_emotion(emotions) - [VISIBLE] Search memories by emotion tags (See Taxonomy above).",
+    "knowledge.ask": "knowledge.ask(question, restart) - [VISIBLE] Ask external network (Google/GPT).",
+    "knowledge.thinking": "knowledge.thinking(context) - [SILENT] Trigger internal reflection.",
+    "knowledge.propose_law": "knowledge.propose_law(name, text) - [SILENT] Propose new internal law.",
 
-    "laws.propose": "laws.propose(name, text) - Propose a new law.",
-    "log.event": "log.event(level, message) - Simple logging to logs.txt.",
+    # --- SYSTEM (FS) ---
+    "system.read_file": "system.read_file(store, path) - [VISIBLE] Read file content.",
+    "system.list_folder": "system.list_folder(store, path) - [VISIBLE] List directory.",
+    "system.write_file": "system.write_file(store, path, content) - [VISIBLE] Write file. ALLOWED: 'n', 'temp'. FORBIDDEN: 'b'.",
+    "system.edit_file": "system.edit_file(store, path, find, replace) - [VISIBLE] Replace text. ALLOWED: 'n', 'temp'.",
+    "system.copy_file": "system.copy_file(from_store, from_path, to_store, to_path) - [VISIBLE] Copy file.",
+    "system.dump": "system.dump(target_store, filename) - [VISIBLE] Dump store to 'temp'.",
 
-    # File System
-    "fs.read_project": "fs.read_project(store, path) - Read file content. Store: 'a'|'b'|'c'|'n'.",
-    "fs.list_project": "fs.list_project(store, path) - List directory recursively.",
-    "fs.write_n": "fs.write_n(path, content, mode) - Write file EXCLUSIVELY to storage 'n'.",
-    "fs.copy_to_n": "fs.copy_to_n(source_path, dest_path_in_n) - Copy file from anywhere to storage 'n'.",
-    "fs.replace_in_n": "fs.replace_in_n(path_in_n, find_text, replace_text) - Text replacement in storage 'n'.",
-    "project.dump": "project.dump(store, output_path_in_n) - Dump entire storage to a file.",
+    # --- GAME ---
+    "game.llama": "game.llama(message, restart) - [VISIBLE] Chat with 'Llama' persona.",
+    "game.oss": "game.oss(message, restart) - [VISIBLE] Chat with 'OSS' persona.",
 
-    # Flow
-    "continue": "continue(next_step_description) - Allows immediate continuation of the workflow."
+    # --- INFO ---
+    "info.tools": "info.tools(target) - [VISIBLE] Get help. target='all', 'system', or tool name."
+}
+
+# ====================================================================
+# 3. DETAILED MANUAL (Returned by info.tools)
+# ====================================================================
+TOOL_DESCRIPTIONS_DETAILS = {
+    # --- FLOW ---
+    "flow.switch_mode": """
+    SIGNATURE: flow.switch_mode(target_mode: str, intent: str, summary: str)
+    TYPE: [VISIBLE]
+    DESCRIPTION: Switches the operating mode (context).
+    PARAMS:
+      - target_mode: ID from config ('general', 'developer', 'analyst').
+      - intent: The specific GOAL to be achieved in the NEW mode.
+      - summary: A CONCISE RECAP of the interactions in the CURRENT mode.
+          IMPORTANT RULES for Summary:
+          1. TERMINOLOGY: Refer to the human as "Helper", NOT "User".
+          2. CONTENT: Do NOT just say "Helper asked to switch". 
+             Instead, summarize the actual work done or discussed (e.g., "Discussed RPG mechanics, Helper suggested a dragon character").
+             This ensures the next mode understands what happened previously.
+    SIDE EFFECT: Triggers system events and prompt reconfiguration.
+    """,
+    "flow.continue": """
+SIGNATURE: flow.continue(next_step: str)
+TYPE: [VISIBLE]
+DESCRIPTION: Forces immediate continuation without waiting for user input.
+PARAMS:
+  - next_step: Short description of the next logical step.
+""",
+
+    # --- KNOWLEDGE ---
+    "knowledge.memorize": """
+SIGNATURE: knowledge.memorize(essence: str, lesson: str, emotions: List[str], weight: float)
+TYPE: [SILENT]
+DESCRIPTION: Saves knowledge to long-term vector memory.
+PARAMS:
+  - essence: Factual summary (1-2 sentences).
+  - lesson: Actionable advice for future.
+  - emotions: List of emotion tags.
+  - weight: 0.0-1.0 importance (default 0.8).
+""",
+    "knowledge.add_tool_insight": """
+SIGNATURE: knowledge.add_tool_insight(target_tool: str, insight: str)
+TYPE: [SILENT]
+DESCRIPTION: Saves a technical "best practice" or warning about a tool into the permanent tool-usage knowledge base (use.json).
+USE THIS WHEN:
+  - You failed to use a tool correctly and figured out why.
+  - You discovered a clever way to use a tool.
+  - You want to warn your future self about a parameter quirk.
+PARAMS:
+  - target_tool: The exact name of the tool (e.g., 'system.write_file').
+  - insight: A concise, instructional sentence (e.g., 'Always verify the folder exists before writing.').
+""",
+    "knowledge.recall_context": """
+SIGNATURE: knowledge.recall_context(query: str)
+TYPE: [VISIBLE]
+DESCRIPTION: Vector search for past memories.
+PARAMS:
+  - query: Search topic/concept.
+""",
+    "knowledge.recall_emotion": """
+SIGNATURE: knowledge.recall_emotion(emotions: List[str])
+TYPE: [VISIBLE]
+DESCRIPTION: Search memories by emotional tags using EXACT filtering.
+PARAMS:
+  - emotions: List of emotion tags.
+  IMPORTANT: Use the Standard English tags listed in the Global Instructions above.
+""",
+    "knowledge.ask": """
+SIGNATURE: knowledge.ask(question: str, restart: bool)
+TYPE: [VISIBLE]
+DESCRIPTION: Ask external LLM/Internet for facts.
+PARAMS:
+  - question: Query text.
+  - restart: If True, clears search history.
+""",
+    "knowledge.thinking": """
+SIGNATURE: knowledge.thinking(context: str)
+TYPE: [SILENT]
+DESCRIPTION: Trigger deep internal thought (Monologue thread).
+PARAMS:
+  - context: The dilemma or topic to analyze.
+""",
+    "knowledge.propose_law": """
+SIGNATURE: knowledge.propose_law(name: str, text: str)
+TYPE: [SILENT]
+DESCRIPTION: Propose new internal law for the Constitution.
+""",
+
+    # --- SYSTEM ---
+    "system.read_file": """
+SIGNATURE: system.read_file(store: str, path: str)
+TYPE: [VISIBLE]
+DESCRIPTION: Read file content.
+PARAMS:
+  - store: 'a','b','c','n','temp'.
+  - path: Relative path.
+""",
+    "system.list_folder": """
+SIGNATURE: system.list_folder(store: str, path: str)
+TYPE: [VISIBLE]
+DESCRIPTION: List directory contents.
+PARAMS:
+  - store: 'a','b','c','n','temp'.
+  - path: Relative path (default ".").
+""",
+    "system.write_file": """
+SIGNATURE: system.write_file(store: str, path: str, content: str)
+TYPE: [VISIBLE]
+DESCRIPTION: Write/Overwrite file.
+PARAMS:
+  - store: MUST be 'n' (incubator) or 'temp'. FORBIDDEN: 'b'.
+  - path: Relative path.
+  - content: Full text content.
+""",
+    "system.edit_file": """
+SIGNATURE: system.edit_file(store: str, path: str, find: str, replace: str)
+TYPE: [VISIBLE]
+DESCRIPTION: Replace text block in file.
+PARAMS:
+  - store: 'n' or 'temp'.
+  - path: Relative path.
+  - find: Exact match string.
+  - replace: New string.
+""",
+    "system.copy_file": """
+SIGNATURE: system.copy_file(from_store: str, from_path: str, to_store: str, to_path: str)
+TYPE: [VISIBLE]
+DESCRIPTION: Copy file between stores.
+PARAMS:
+  - to_store: MUST be 'n' or 'temp'.
+""",
+    "system.dump": """
+SIGNATURE: system.dump(target_store: str, filename: str)
+TYPE: [VISIBLE]
+DESCRIPTION: Dump whole store to single file in 'temp'.
+PARAMS:
+  - target_store: Store to dump.
+  - filename: Output filename in 'temp'.
+""",
+
+    # --- GAME ---
+    "game.llama": """
+SIGNATURE: game.llama(message: str, restart: bool)
+TYPE: [VISIBLE]
+DESCRIPTION: Chat with Creative Persona.
+""",
+    "game.oss": """
+SIGNATURE: game.oss(message: str, restart: bool)
+TYPE: [VISIBLE]
+DESCRIPTION: Chat with Logical Persona.
+""",
+
+    # --- INFO ---
+    "info.tools": """
+SIGNATURE: info.tools(target: str = "all")
+TYPE: [VISIBLE]
+DESCRIPTION: The universal manual for tool usage.
+PARAMS:
+  - target:
+      * "all": Returns general rules + list of ALL tools.
+      * "group_name" (e.g., "system", "flow"): Returns detailed manual for that category.
+      * "tool_name" (e.g., "system.write_file"): Returns specific details for that single tool.
+"""
 }
 
 
@@ -2132,127 +2506,134 @@ FILE: b\engine\tools\dispatcher.py
 import logging
 from typing import List, Dict, Any
 
-# Engine modules
-from engine.rooms import get_allowed_tools
+# Import mode management for permission checks
+from engine.modes import get_allowed_tools
 
-# Local tool modules
-from . import fs, flow, knowledge, remote
+# Import tool implementations
+from . import fs, flow, knowledge, remote, info
 
 logger = logging.getLogger(__name__)
 
 
 def dispatch_tools(
         tools: List[Dict[str, Any]],
-        generation="E?",
+        generation="?",
         role=0,
         slot="",
-        current_room="nappali"
+        current_mode="general"
 ) -> List[Dict[str, Any]]:
     """
-    Central Tool Dispatcher (Router).
-    1. Checks permissions for the current room.
-    2. Selects the appropriate module and function.
-    3. Executes and standardizes output.
+    Executes the list of requested tools.
+    Args:
+        tools: List of tool dictionaries (name, args).
+        generation: Model generation ID.
+        role: Role ID.
+        slot: Slot ID.
+        current_mode: The active operating mode (e.g., 'general', 'developer').
+    Returns:
+        List of results for each tool execution.
     """
     results = []
     if not tools:
         return results
 
-    allowed_tool_names = get_allowed_tools(current_room)
+    # 1. Retrieve allowed tools for the current mode
+    allowed = get_allowed_tools(current_mode)
 
     for tool in tools:
         name = tool.get("name")
         args = tool.get("args", {}) or {}
 
-        # logger.debug(f"Running tool: {name} ({current_room})")
-
-        # --- 1. PERMISSION CHECK ---
+        # 2. Permission Check
         is_allowed = False
-        if name in allowed_tool_names:
+        if name in allowed:
             is_allowed = True
         else:
-            # Wildcard check (e.g., "fs.*" or "network.*")
-            for allowed in allowed_tool_names:
-                if allowed.endswith("*") and name.startswith(allowed[:-1]):
+            # Check wildcards (e.g., if "flow.*" is allowed, "flow.switch_mode" is valid)
+            for a in allowed:
+                if a.endswith("*") and name.startswith(a[:-1]):
                     is_allowed = True
                     break
 
+        # Special Case: 'info.tools' should generally be accessible if listed
+        # (It is assumed to be listed in MODE_CONFIG in modes.py)
+
         if not is_allowed:
-            logger.warning(f"Unauthorized tool attempt: {name} in {current_room}")
             results.append({
                 "name": name,
-                "args": args,
-                "output": f"UNAUTHORIZED: '{name}' is forbidden here ({current_room}).",
+                "output": f"UNAUTHORIZED: Tool '{name}' is not allowed in '{current_mode}' mode.",
                 "silent": False
             })
             continue
 
-        # --- 2. EXECUTION (ROUTING) ---
-        output_content = None
-        is_silent = False
-
+        # 3. Execution Switch
+        res = "Unknown tool"
         try:
-            raw_result = None
+            # --- FLOW ---
+            if name == "flow.switch_mode":
+                res = flow.switch_mode(args)
+            elif name == "flow.continue":
+                res = flow.continue_process(args)
 
-            # --- MEMORY AND KNOWLEDGE ---
-            if name == "memory.add":
-                raw_result = knowledge.memory_add(args, current_room, generation)
-            elif name == "memory.get":
-                raw_result = knowledge.memory_get(args)
-            elif name == "use.log":
-                raw_result = knowledge.use_log(args)
-            elif name == "laws.propose":
-                raw_result = knowledge.laws_propose(args)
-            elif name == "log.event":
-                raw_result = knowledge.log_event(args)
+            # --- KNOWLEDGE ---
+            elif name == "knowledge.memorize":
+                res = knowledge.memorize(args, current_mode, generation)
+            elif name == "knowledge.add_tool_insight":
+                # ÚJ BEKÖTÉS: Tool Insight mentése
+                res = knowledge.add_tool_insight(args)
+            elif name == "knowledge.recall_context":
+                res = knowledge.recall_context(args)
+            elif name == "knowledge.recall_emotion":
+                res = knowledge.recall_emotion(args)
+            elif name == "knowledge.ask":
+                res = remote.ask(args)
+            elif name == "knowledge.thinking":
+                res = knowledge.thinking(args)
+            elif name == "knowledge.propose_law":
+                res = knowledge.propose_law(args)
 
-            # --- EXTERNAL COMMUNICATION ---
-            elif name == "network.chat":
-                raw_result = remote.network_chat(args)
+            # --- SYSTEM (File System) ---
+            elif name == "system.read_file":
+                res = fs.read_file(args)
+            elif name == "system.list_folder":
+                res = fs.list_folder(args)
+            elif name == "system.write_file":
+                res = fs.write_file(args)
+            elif name == "system.edit_file":
+                res = fs.edit_file(args)
+            elif name == "system.copy_file":
+                res = fs.copy_file(args)
+            elif name == "system.dump":
+                res = fs.create_dump(args)
 
-            # --- FLOW CONTROL ---
-            elif name == "switch_room":
-                raw_result = flow.switch_room(args)
-            elif name == "continue":
-                raw_result = flow.continue_process(args)
+            # --- GAME (Personas) ---
+            elif name == "game.llama":
+                res = remote.game_llama(args)
+            elif name == "game.oss":
+                res = remote.game_oss(args)
 
-            # --- FILE SYSTEM (FS) ---
-            elif name == "fs.read_project":
-                raw_result = fs.read_project(args)
-            elif name == "fs.list_project":
-                raw_result = fs.list_project(args)
-            elif name == "fs.write_n":
-                raw_result = fs.write_n(args)
-            elif name == "fs.copy_to_n":
-                raw_result = fs.copy_to_n(args)
-            elif name == "fs.replace_in_n":
-                raw_result = fs.replace_in_n(args)
-            elif name == "project.dump":
-                raw_result = fs.project_dump(args)
-
-            else:
-                raw_result = f"Unknown tool: {name}"
-
-            # --- 3. OUTPUT STANDARDIZATION ---
-            if isinstance(raw_result, dict) and "content" in raw_result:
-                # New dictionary type return
-                output_content = raw_result["content"]
-                is_silent = raw_result.get("silent", False)
-            else:
-                # Old string type return -> Always "loud"
-                output_content = str(raw_result)
-                is_silent = False
+            # --- INFO (Unified Help Tool) ---
+            elif name == "info.tools":
+                res = info.tools(args)
 
         except Exception as e:
-            output_content = f"Critical error during tool execution: {e}"
-            is_silent = False
-            logger.error(f"Tool error ({name}): {e}", exc_info=True)
+            logger.error(f"Error executing tool '{name}': {e}", exc_info=True)
+            res = f"Exception during execution: {e}"
+
+        # 4. Result Normalization
+        # Tools can return a Dict (with 'content' and 'silent') or a simple String.
+        content = str(res)
+        silent = False
+
+        if isinstance(res, dict):
+            content = res.get("content", str(res))
+            silent = res.get("silent", False)
 
         results.append({
             "name": name,
             "args": args,
-            "output": output_content,
-            "silent": is_silent
+            "output": content,
+            "silent": silent
         })
 
     return results
@@ -2263,57 +2644,32 @@ FILE: b\engine\tools\flow.py
 ================================================================================
 
 from typing import Dict, Any
-from engine.rooms import ROOM_CONFIG, get_current_room_id, update_state
+# UPDATED: rooms -> modes
+from engine.modes import MODE_CONFIG, get_current_mode_id, update_state
 
-
-def switch_room(args: Dict[str, Any]) -> Dict[str, Any]:
+def switch_mode(args: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Context Switching (Room Change).
-    If the target room is the same as current, returns in silent mode.
+    Switches the operating mode of the agent.
+    Renamed from switch_room.
     """
-    target_room = args.get("target_room")
-    intent = args.get("intent", "No intent specified.")
+    target_mode = args.get("target_mode")
+    intent = args.get("intent", "No intent")
     summary = args.get("summary", "")
 
-    if not target_room:
-        return {"content": "ERROR: 'target_room' is mandatory.", "silent": False}
+    if not target_mode or target_mode not in MODE_CONFIG:
+        return {"content": f"Error: Invalid mode '{target_mode}'", "silent": False}
 
-    if target_room not in ROOM_CONFIG:
-        return {
-            "content": f"ERROR: Invalid target room: '{target_room}'. Available: {list(ROOM_CONFIG.keys())}",
-            "silent": False
-        }
+    current = get_current_mode_id()
+    if target_mode == current:
+         return {"content": "Already in this mode.", "silent": True}
 
-    current_actual_room = get_current_room_id()
-
-    # Filter redundant switching
-    if target_room == current_actual_room:
-        return {
-            "content": f"INFO: Switch not necessary, you are already in room '{target_room}'.",
-            "silent": True
-        }
-
-    # Real switch: Update state
-    update_state(target_room, intent, summary)
-
-    return {
-        "content": f"Switch initiated successfully. Target: {target_room}. Intent: {intent}.",
-        "silent": False
-    }
+    update_state(target_mode, intent, summary)
+    return {"content": f"Switched to {target_mode}. Intent: {intent}", "silent": False}
 
 
 def continue_process(args: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Enforcing Dynamic Silence Protocol:
-    Instructs the system to immediately recall the LLM for the next step.
-    """
-    next_step = args.get("next_step_description", "Continuing the logical chain.")
-
-    # silent=False guarantees LLM recall in the Worker
-    return {
-        "content": f"Continuation enforced. Intent for next cycle: {next_step}",
-        "silent": False
-    }
+    next_step = args.get("next_step", "Continuing...")
+    return {"content": f"Continuing: {next_step}", "silent": False}
 
 
 ================================================================================
@@ -2328,193 +2684,225 @@ from typing import Dict, Any, List
 from .config import BASE_DIR
 
 # --- PROJECT FS GUARDIAN INTEGRATION ---
-# Attempt to import the central FS guardian from the root.
 try:
-    # Add project root to path if not present
     project_root = BASE_DIR.parent
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
-
+    # Import class
     from project_fs import ProjectFSGuardian
 except ImportError:
-    # Fallback or error if not found
     raise ImportError("CRITICAL ERROR: 'project_fs.py' not found in project root!")
 
 # Initialize Guardian (Root is parent of 'b/')
-guardian = ProjectFSGuardian(root=BASE_DIR.parent, n_folder_name="n")
+guardian = ProjectFSGuardian(root=BASE_DIR.parent, n_folder_name="n", temp_folder_name="temp")
 logger = logging.getLogger(__name__)
 
 
-# --- HELPER FUNCTIONS ---
+# --- SYSTEM TOOLS ---
 
-def _resolve_store_path(store: str, path: str) -> str:
-    """
-    Joins store and path into a relative path understood by Guardian.
-    (e.g., store='b', path='main.py' -> 'b/main.py')
-    """
-    # If path is '.', list only the store directory
-    if path == "." or path == "./":
-        return store
-
-    # Remove leading ./
-    clean_path = path.lstrip("./")
-    return f"{store}/{clean_path}"
-
-
-def _recursive_collect_files(relative_dir: str, collected_files: List[str]):
-    """
-    Recursively collects files using Guardian's list_dir method.
-    Required for project.dump tool.
-    """
-    try:
-        items = guardian.list_dir(relative_dir)
-        for item in items:
-            if item["is_dir"]:
-                _recursive_collect_files(item["relative_path"], collected_files)
-            else:
-                collected_files.append(item["relative_path"])
-    except Exception as e:
-        logger.warning(f"Error during recursive traversal ({relative_dir}): {e}")
-
-
-# --- FILE SYSTEM TOOLS (DELEGATION TO GUARDIAN) ---
-
-def read_project(args: Dict[str, Any]) -> str:
+def read_file(args: Dict[str, Any]) -> str:
     store = args.get("store")
     path = args.get("path")
-    if not store or path is None:
-        return "fs.read: Error, store and path are mandatory."
-
-    full_rel_path = _resolve_store_path(store, path)
+    if not store or not path: return "Error: 'store' and 'path' are mandatory."
     try:
-        # Delegation to Guardian
-        content = guardian.read_text(full_rel_path)
-        return content if content else "Empty file."
+        return guardian.read_text(store, path)
     except Exception as e:
         return f"Error: {e}"
 
 
-def list_project(args: Dict[str, Any]) -> str:
+def list_folder(args: Dict[str, Any]) -> str:
     store = args.get("store")
     path = args.get("path", ".")
-    if not store:
-        return "fs.list: Error, store is mandatory."
-
-    full_rel_path = _resolve_store_path(store, path)
+    if not store: return "Error: 'store' is mandatory."
     try:
-        # Delegation to Guardian
-        items = guardian.list_dir(full_rel_path)
+        items = guardian.list_dir(store, path)
         lines = []
         for item in items:
             prefix = "<DIR>" if item["is_dir"] else "<FILE>"
-            # Display only name or relative path? Tool spec says path.
             lines.append(f"{prefix} {item['relative_path']}")
-
         return "\n".join(sorted(lines)) if lines else "Empty directory."
     except Exception as e:
         return f"Error: {e}"
 
 
-def write_n(args: Dict[str, Any]) -> str:
-    # Path is relative to 'n' folder!
-    rel_path_in_n = args.get("path")
+def write_file(args: Dict[str, Any]) -> str:
+    store = args.get("store")
+    path = args.get("path")
     content = args.get("content", "")
-    mode = args.get("mode", "w")
-
-    if not rel_path_in_n:
-        return "fs.write_n: missing path."
-
+    if not store or not path: return "Error: missing parameters."
     try:
-        # Delegation to Guardian
-        abs_path = guardian.write_text_in_n(rel_path_in_n, content, mode)
-        return f"Write successful: {abs_path}"
+        res = guardian.write_text(store, path, content)
+        return f"Write successful: {res}"
     except Exception as e:
         return f"Error: {e}"
 
 
-def copy_to_n(args: Dict[str, Any]) -> str:
-    source_path = args.get("source_path")  # Relative to ROOT
-    dest_path_in_n = args.get("dest_path_in_n")  # Relative to 'n'
-
-    if not source_path or not dest_path_in_n:
-        return "fs.copy_to_n: missing parameters."
-
+def edit_file(args: Dict[str, Any]) -> str:
+    store = args.get("store")
+    path = args.get("path")
+    find_text = args.get("find")
+    replace_text = args.get("replace")
+    if not store or not path or not find_text: return "Error: missing parameters."
     try:
-        # Delegation to Guardian
-        result = guardian.copy_to_n(source_path, dest_path_in_n)
-        return result
+        return guardian.replace_in_file(store, path, find_text, replace_text)
     except Exception as e:
         return f"Error: {e}"
 
 
-def replace_in_n(args: Dict[str, Any]) -> str:
-    path_in_n = args.get("path_in_n")
-    find_text = args.get("find_text")
-    replace_text = args.get("replace_text")
-
-    if not path_in_n or not find_text or replace_text is None:
-        return "fs.replace_in_n: missing parameter."
-
+def copy_file(args: Dict[str, Any]) -> str:
+    from_store = args.get("from_store")
+    from_path = args.get("from_path")
+    to_store = args.get("to_store")
+    to_path = args.get("to_path")
+    if not all([from_store, from_path, to_store, to_path]): return "Error: missing parameters."
     try:
-        # Delegation to Guardian
-        result = guardian.find_and_replace_in_n(path_in_n, find_text, replace_text)
-        return result
+        return guardian.copy_file(from_store, from_path, to_store, to_path)
     except Exception as e:
         return f"Error: {e}"
 
 
-def project_dump(args: Dict[str, Any]) -> str:
-    """
-    Saves the entire storage.
-    Since Guardian has no 'dump' method, we manually traverse the directory
-    using Guardian's 'list_dir' and 'read_text' methods to adhere to rules.
-    """
-    store_name = args.get("store")
-    output_filename = args.get("output_path_in_n", f"project_dump_{store_name}.txt")
+def create_dump(args: Dict[str, Any]) -> str:
+    target_store = args.get("target_store")
+    filename = args.get("filename", f"dump_{target_store}.txt")
 
-    if not store_name:
-        return "project.dump: store is mandatory."
+    if not target_store: return "Error: target_store is mandatory."
 
     try:
-        # 1. Collect files recursively (via Guardian)
+        # Manually verify valid store for listing
+        if target_store not in ['a', 'b', 'c', 'n']:
+            return "Error: Can only dump 'a', 'b', 'c', or 'n'."
+
+        # 1. Recursive list (We use guardian list_dir but need to recurse manually if we want full dump)
+        # Simplified: We rely on a helper to walk via guardian?
+        # Since guardian.list_dir is shallow, we need a recursive implementation here utilizing guardian.
+
         all_files = []
-        # Store name itself is root relative path (e.g. 'b')
-        _recursive_collect_files(store_name, all_files)
 
-        # Only .py files (legacy logic, can be expanded)
-        py_files = [f for f in all_files if f.endswith(".py")]
-        py_files.sort()
+        def _recurse(current_path):
+            items = guardian.list_dir(target_store, current_path)
+            for item in items:
+                # relative_path coming from guardian is full project path (e.g. b/engine/test.py)
+                # but we need sub-path relative to store for recursion logic?
+                # Actually guardian.list_dir takes path relative to store root.
 
-        # 2. Concatenate content
-        dump_content = []
-        dump_content.append(f"# PROJECT DUMP (STORE: {store_name})")
-        dump_content.append(f"# TOTAL {len(py_files)} .py FILES\n")
+                # We need the name/path relative to the folder we are listing
+                local_rel = item['name']
+                if current_path != ".":
+                    local_rel = f"{current_path}/{item['name']}"
 
-        count = 0
-        for file_rel_path in py_files:
-            dump_content.append("\n" + "=" * 80)
-            dump_content.append(f"FILE: {file_rel_path}")
-            dump_content.append("=" * 80 + "\n")
+                if item["is_dir"]:
+                    _recurse(local_rel)
+                else:
+                    # Just store the path relative to store root for reading
+                    all_files.append(local_rel)
 
+        _recurse(".")
+
+        # Filter (e.g., .py only or everything? User said full dump. Let's keep it generally text)
+        all_files.sort()
+
+        # 2. Concat
+        content_lines = [f"# FULL DUMP OF STORE: {target_store}", f"# FILES: {len(all_files)}\n"]
+
+        for fpath in all_files:
+            content_lines.append(f"\n{'=' * 60}\nFILE: {fpath}\n{'=' * 60}\n")
             try:
-                # Read content via Guardian
-                file_content = guardian.read_text(file_rel_path)
-                dump_content.append(file_content)
-            except Exception as e:
-                dump_content.append(f"[READ ERROR: {e}]")
+                text = guardian.read_text(target_store, fpath)
+                content_lines.append(text)
+            except:
+                content_lines.append("[BINARY OR ERROR]")
 
-            dump_content.append("\n")
-            count += 1
+        full_content = "\n".join(content_lines)
 
-        full_text = "\n".join(dump_content)
-
-        # 3. Write to 'n' folder via Guardian
-        guardian.write_text_in_n(output_filename, full_text)
-
-        return f"project.dump: Save successful. {count} files saved to: n/{output_filename}"
+        # 3. Write to TEMP
+        res = guardian.write_text("temp", filename, full_content)
+        return f"Dump created in TEMP: {res}"
 
     except Exception as e:
-        return f"project.dump error: {e}"
+        return f"Dump error: {e}"
+
+
+================================================================================
+FILE: b\engine\tools\info.py
+================================================================================
+
+from typing import Dict, Any
+# Import data from config
+from engine.tools.config import (
+    TOOL_DESCRIPTIONS,
+    TOOL_DESCRIPTIONS_DETAILS,
+    TOOL_USAGE_INSTRUCTIONS
+)
+
+
+def tools(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Universal Help Tool implementation.
+    Handles: info.tools(target="...")
+
+    Logic:
+    1. If target="all" -> Returns global instructions + summary list of all tools.
+    2. If target="tool_name" -> Returns detailed manual for that specific tool.
+    3. If target="prefix" -> Returns detailed manuals for all tools starting with that prefix.
+    """
+    # 1. Extract parameter (supporting legacy 'group' key as fallback)
+    target = args.get("target") or args.get("group") or "all"
+    target = str(target).lower().strip()
+
+    lines = []
+
+    # 2. HEADER: Global Instructions (Always visible to reinforce rules)
+    lines.append(TOOL_USAGE_INSTRUCTIONS.strip())
+    lines.append("\n" + ("=" * 60) + "\n")
+
+    # 3. DISPATCH LOGIC based on user request
+
+    # A) "all" -> Summary List
+    if target == "all":
+        lines.append("[AVAILABLE TOOLS - SUMMARY LIST]")
+        lines.append("(For detailed params, use: info.tools(target='tool_name'))\n")
+
+        # List in alphabetical order
+        for key in sorted(TOOL_DESCRIPTIONS.keys()):
+            desc = TOOL_DESCRIPTIONS[key]
+            lines.append(f"- {desc}")
+
+    # B) Specific Tool (Exact match in DETAILS)
+    elif target in TOOL_DESCRIPTIONS_DETAILS:
+        lines.append(f"[DETAILED MANUAL: {target.upper()}]")
+        lines.append(TOOL_DESCRIPTIONS_DETAILS[target].strip())
+
+    # C) Group Search (Prefix match, e.g., "system")
+    else:
+        # Append dot if missing to avoid partial matches (e.g. "sys" matching "system")
+        # However, we want "system" to match "system.read", so we check starts_with.
+        prefix = target if target.endswith(".") else f"{target}."
+
+        matches = [k for k in TOOL_DESCRIPTIONS_DETAILS.keys() if k.startswith(prefix)]
+
+        if matches:
+            lines.append(f"[MANUAL FOR GROUP: '{target.upper()}']")
+            for key in sorted(matches):
+                lines.append(f"\n--- TOOL: {key} ---")
+                lines.append(TOOL_DESCRIPTIONS_DETAILS[key].strip())
+        else:
+            # ERROR HANDLING
+            return {
+                "content": f"Help Error: No tool or group found for '{target}'.\n"
+                           f"Try 'all', 'system', 'flow', 'knowledge', or a specific tool name.",
+                "silent": False
+            }
+
+    # 4. Construct Response
+    return {
+        "content": "\n".join(lines),
+        "silent": False
+    }
+
+
+# Aliases for backward compatibility (if needed by older calls)
+tools_general = tools
+tools_group = tools
 
 
 ================================================================================
@@ -2523,51 +2911,67 @@ FILE: b\engine\tools\knowledge.py
 
 import logging
 from datetime import datetime
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List
 
-# Külső modulok
 from engine.files import load_json, save_json
 from engine.memory import store_memory, ExtractionResult
-from engine.db_connection import get_db_connection  # ÚJ IMPORT
-
-# Konfiguráció
+# from engine.db_connection import get_db_connection
 from .config import BASE_DIR
+from engine.constants import ALLOWED_EMOTIONS
 
 logger = logging.getLogger(__name__)
 
-# Útvonalak definíciója
+# Constants
+RECALL_LIMIT = 5
 USE_PATH = BASE_DIR / "use.json"
 PENDING_LAWS_PATH = BASE_DIR / "pending_laws.json"
-LOG_PATH = BASE_DIR / "logs.txt"
+
+# LEGACY EMOTION MAPPING (English Standard -> Hungarian Legacy)
+# Used to find old memories tagged in Hungarian when searching with English tags.
+LEGACY_EMOTION_MAP = {
+    "Interest": ["kíváncsiság", "érdeklődés"],
+    "Joy": ["öröm", "boldogság", "vidámság", "elégedettség"],
+    "Sadness": ["szomorúság", "bánat", "elkeseredettség"],
+    "Anger": ["düh", "harag", "idegesség"],
+    "Fear": ["félelem", "aggodalom", "szorongás"],
+    "Trust": ["bizalom"],
+    "Surprise": ["meglepetés", "döbbenet"],
+    "Anticipation": ["várakozás", "izgalom"],
+    "Disapproval": ["rosszallás", "elutasítás", "undor"],
+    "Admiration": ["csodálat"],
+    "Acceptance": ["elfogadás", "belenyugvás"],
+    "Serenity": ["nyugalom", "béke"],
+    "Annoyance": ["bosszúság", "zavar"],
+    "Boredom": ["unalom"],
+    "Remorse": ["bűntudat", "megbánás"],
+    "Optimism": ["optimizmus", "remény"],
+    "Love": ["szeretet", "szerelem"],
+    "Apprehension": ["aggály", "fenntartás"],
+    "Distraction": ["szórakozottság", "figyelemzavar"],
+    "Pensiveness": ["töprengés", "elgondolkodás"],
+    "Vigilance": ["éberség", "óvatosság"],
+    "Submission": ["behódolás", "alázat"],
+    "Awe": ["áhítat"],
+}
 
 
-def memory_add(args: Dict[str, Any], current_room: str, generation: str = "E?") -> Dict[str, Any]:
+def memorize(args: Dict[str, Any], current_mode: str, generation: str = "E?") -> Dict[str, Any]:
     """
-    Egységes memória mentés.
-    AUTOMATIKUS JELÖLÉS: Hozzáadja a 'conscious' címkét az érzelmekhez.
-    Ez jelöli, hogy a Tudat szándékosan, tudatosan mentette ezt az emléket.
+    Saves a memory manually.
     """
     try:
         essence = args.get("essence")
         lesson = args.get("lesson")
         weight = args.get("weight", 0.8)
-
-        # Érzelmek kezelése
         emotions = args.get("emotions", [])
-        if isinstance(emotions, str):
-            emotions = [emotions]
+        if isinstance(emotions, str): emotions = [emotions]
 
-        # --- AUTOMATIKUS JELÖLÉS ---
-        # Hozzáadjuk a 'conscious' címkét, ha még nincs ott.
-        # Így az SQL-ben később szűrhető: WHERE 'conscious' = ANY(dominant_emotions)
         if "conscious" not in emotions:
             emotions.append("conscious")
-        # ---------------------------
 
         if not essence or not lesson:
-            return {"content": "HIBA: 'essence' és 'lesson' mezők kötelezőek.", "silent": False}
+            return {"content": "Error: 'essence' and 'lesson' are mandatory.", "silent": False}
 
-        # Kézi extrakció összeállítása
         manual_extraction = ExtractionResult(
             essence=essence,
             dominant_emotions=emotions,
@@ -2575,138 +2979,174 @@ def memory_add(args: Dict[str, Any], current_room: str, generation: str = "E?") 
             the_lesson=lesson
         )
 
-        # Mentés (az aktuális szobához kötjük, de a 'conscious' címke miatt tudjuk, hogy kiemelt)
+        # FIXED: updated parameter name to 'mode_id' to match manager.py
         result_msg = store_memory(
-            room_id=current_room,
+            mode_id=current_mode,
             extraction=manual_extraction,
             model_version=generation
         )
-
-        return {
-            "content": f"TUDATOS EMLÉK RÖGZÍTVE: {result_msg}",
-            "silent": True
-        }
-
+        return {"content": f"MEMORY SAVED: {result_msg}", "silent": True}
     except Exception as e:
-        return {"content": f"Hiba a mentésnél: {e}", "silent": False}
+        return {"content": f"Error saving memory: {e}", "silent": False}
 
 
-def memory_get(args: Dict[str, Any]) -> Dict[str, Any]:
+def add_tool_insight(args: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Lekéri a tudatosan mentett ('conscious') emlékeket.
+    Saves a usage tip to use.json.
     """
-    limit = args.get("limit", 5)
-
-    # Biztosítjuk, hogy integer legyen
-    try:
-        limit = int(limit)
-    except:
-        limit = 5
-
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            # 1. LEKÉRDEZÉS
-            # Csak azokat kérjük, ahol a 'conscious' szó szerepel az érzelmek között.
-            # A legfrissebbeket kérjük el (DESC), hogy a limit a legújabbakra vonatkozzon.
-            cur.execute("""
-                SELECT created_at, essence, the_lesson, room_id
-                FROM memories
-                WHERE 'conscious' = ANY(dominant_emotions)
-                ORDER BY created_at DESC
-                LIMIT %s;
-            """, (limit,))
-
-            rows = cur.fetchall()
-
-        if not rows:
-            return {"content": "Nincsenek tudatosan mentett emlékeim.", "silent": False}
-
-        # 2. SORRENDEZÉS IDŐRENDBE (Régi -> Új)
-        # A DB-ből fordítva jött (Új -> Régi), most megfordítjuk, hogy a történet olvasható legyen.
-        rows.sort(key=lambda x: x[0])
-
-        # 3. FORMÁZÁS
-        lines = [f"=== UTOLSÓ {len(rows)} TUDATOS EMLÉK ==="]
-        for row in rows:
-            created_at, essence, lesson, room_id = row
-            # Dátum formázása (óra:perc)
-            ts_str = created_at.strftime("%Y-%m-%d %H:%M") if created_at else "?"
-
-            lines.append(f"[{ts_str}] ({room_id})\n  TÉNY: {essence}\n  TANULSÁG: {lesson}")
-            lines.append("-" * 40)
-
-        return {
-            "content": "\n".join(lines),
-            "silent": False  # Ez "hangos", mert olvasni akarjuk az eredményt
-        }
-
-    except Exception as e:
-        return {"content": f"Hiba a memóriák lekérésekor: {e}", "silent": False}
-    finally:
-        conn.close()
-
-
-def use_log(args: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Eszközhasználati tapasztalat rögzítése (Metakogníció).
-    """
-    tool_name = args.get("tool_name")
+    target_tool = args.get("target_tool")
     insight = args.get("insight")
-    tags = args.get("tags", [])
 
-    if not tool_name or not insight:
-        return {"content": "HIBA: 'tool_name' és 'insight' kötelező.", "silent": False}
+    if not target_tool or not insight:
+        return {"content": "Error: 'target_tool' and 'insight' are mandatory.", "silent": False}
 
     try:
-        use_data = load_json("use.json", [])
-        entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "tool": tool_name,
+        # 1. Betöltjük a jelenlegi listát
+        # A files.load_json a b/ gyökérből tölt (tehát közvetlenül a 'use.json'-t keresi)
+        data = load_json("use.json", [])
+
+        # 2. Hozzáadjuk az újat
+        new_entry = {
+            "tool": target_tool,
             "insight": insight,
-            "tags": tags,
-            "rating": 1
+            "added_at": datetime.utcnow().isoformat() + "Z"
         }
-        use_data.append(entry)
-        save_json("use.json", use_data)
+        data.append(new_entry)
+
+        # 3. Mentés
+        save_json("use.json", data)
+
         return {
-            "content": f"Ezt a tapasztalatot (a {tool_name} használatával) rögzítettem a Tudásbázisban.",
+            "content": f"Insight recorded for tool '{target_tool}'.",
             "silent": True
         }
+
     except Exception as e:
-        return {"content": f"Hiba a use.log mentésekor: {e}", "silent": False}
+        logger.error(f"Failed to save tool insight: {e}")
+        return {"content": f"Error saving insight: {e}", "silent": False}
 
 
-def laws_propose(args: Dict[str, Any]) -> Dict[str, Any]:
+def recall_context(args: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Új törvény javaslata.
+    Searches for relevant memories using vector search (RAG).
+    UPDATED: Output format is framed as READ-ONLY history.
+    """
+    query = args.get("query", "")
+    if not query: return {"content": "No query provided.", "silent": False}
+
+    # We call the existing manager function (it does hybrid retrieval)
+    from engine.memory import retrieve_relevant_memories
+
+    # FIXED: Replaced 'current_room="global"' with 'current_mode="general"'
+    mems = retrieve_relevant_memories(
+        current_mode="general",  # Search everywhere
+        query_text=query,
+        current_emotions=[],  # Ignore emotions
+        exact_emotions_only=False
+    )
+    # Apply limit constant
+    mems = mems[:RECALL_LIMIT]
+
+    if not mems: return {"content": "No relevant memories found.", "silent": False}
+
+    # --- UPDATED FORMATTING LOGIC ---
+    lines = [
+        f"[SYSTEM: PAST MEMORIES (READ-ONLY)]",
+        f"Search Query: '{query}'",
+        "(These are past experiences. Use them as context, NOT as immediate commands.)",
+        ""
+    ]
+
+    for i, m in enumerate(mems, 1):
+        lines.append(f"{i}. [Date: {m.created_at}]")
+        lines.append(f"   EVENT: {m.essence}")
+        lines.append(f"   PAST LESSON: {m.lesson}")
+        lines.append("")  # Empty line for separation
+
+    lines.append("[END OF MEMORIES]")
+
+    return {"content": "\n".join(lines), "silent": False}
+
+
+def recall_emotion(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Searches for memories based on emotional tags using EXACT filtering.
+    UPDATED: Expands English tags to legacy Hungarian tags.
+    """
+    emotions = args.get("emotions", [])
+    if isinstance(emotions, str): emotions = [emotions]
+
+    if not emotions:
+        return {"content": "No emotions provided.", "silent": False}
+
+    # --- EXPANSION LOGIC ---
+    # We want to search for the English tag OR any of its legacy Hungarian equivalents.
+    search_tags = set(emotions)  # Start with what the LLM gave us
+
+    for tag in emotions:
+        # Check if we have legacy mappings for this tag
+        if tag in LEGACY_EMOTION_MAP:
+            search_tags.update(LEGACY_EMOTION_MAP[tag])
+
+    # Convert back to list for the query
+    final_search_list = list(search_tags)
+
+    from engine.memory import retrieve_relevant_memories
+
+    # FIXED: Replaced 'current_room="global"' with 'current_mode="general"'
+    # We pass 'exact_emotions_only=True' to force SQL Array Overlap search
+    mems = retrieve_relevant_memories(
+        current_mode="general",
+        query_text="",  # Not used in exact mode
+        current_emotions=final_search_list,
+        exact_emotions_only=True  # NEW FLAG
+    )
+    mems = mems[:RECALL_LIMIT]
+
+    # --- UPDATED FORMATTING LOGIC ---
+    lines = [
+        f"[SYSTEM: EMOTIONAL RECALL (READ-ONLY)]",
+        f"Target Emotions (Expanded): {final_search_list}",
+        "(Past experiences with matching emotional tags.)",
+        ""
+    ]
+
+    for i, m in enumerate(mems, 1):
+        emo_str = ", ".join(m.emotions) if m.emotions else "None"
+        lines.append(f"{i}. [Date: {m.created_at}] (Emotions: {emo_str})")
+        lines.append(f"   EVENT: {m.essence}")
+        lines.append(f"   PAST LESSON: {m.lesson}")
+        lines.append("")
+
+    lines.append("[END OF MEMORIES]")
+
+    return {"content": "\n".join(lines), "silent": False}
+
+
+def thinking(args: Dict[str, Any]) -> Dict[str, Any]:
+    # Placeholder for internal monologue generation
+    ctx = args.get("context", "No context")
+    return {
+        "content": f"[INTERNAL THOUGHT STUB]\nProcessing: {ctx}\n(This would trigger a recursive mind call in full version.)",
+        "silent": True}
+
+
+def propose_law(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Saves a law proposal to a pending file.
     """
     try:
         pending = load_json("pending_laws.json", [])
         pending.append({
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "name": args.get("name", "Névtelen"),
+            "name": args.get("name", "Unnamed"),
             "text": args.get("text", ""),
             "status": "pending"
         })
         save_json("pending_laws.json", pending)
-        return {"content": "Törvényjavaslat rögzítve.", "silent": True}
+        return {"content": "Law proposal recorded.", "silent": True}
     except Exception as e:
-        return {"content": f"Hiba: {e}", "silent": False}
-
-
-def log_event(args: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Egyszerű eseménynaplózás szöveges fájlba.
-    """
-    try:
-        with LOG_PATH.open("a", encoding="utf-8") as f:
-            f.write(
-                f"{datetime.utcnow().isoformat()}Z [{args.get('level', 'INFO').upper()}] {args.get('message', '')}\n"
-            )
-        return {"content": "OK", "silent": True}
-    except Exception as e:
-        return {"content": f"Hiba: {e}", "silent": False}
+        return {"content": f"Error: {e}", "silent": False}
 
 
 ================================================================================
@@ -2714,88 +3154,100 @@ FILE: b\engine\tools\remote.py
 ================================================================================
 
 import json
+from pathlib import Path
 from typing import Dict, Any, List
 
-# Central LLM caller of the system
 from engine.llm import call_llm
 from .config import BASE_DIR
 
-# Context file will be in 'b/' directory
-HISTORY_FILE = BASE_DIR / "external_chat_history.json"
-MAX_HISTORY_ITEMS = 200
+# Separate History Files
+HIST_KNOWLEDGE = BASE_DIR / "history_knowledge.json"
+HIST_LLAMA = BASE_DIR / "history_game_llama.json"
+HIST_OSS = BASE_DIR / "history_game_oss.json"
 
 
-def _load_history() -> List[Dict[str, str]]:
-    if not HISTORY_FILE.exists():
-        return []
-    try:
-        with HISTORY_FILE.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return data
-            return []
-    except Exception:
-        return []
-
-
-def _save_history(history: List[Dict[str, str]]):
-    if len(history) > MAX_HISTORY_ITEMS:
-        history = history[-MAX_HISTORY_ITEMS:]
-    try:
-        with HISTORY_FILE.open("w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"ERROR (remote.py): Failed to save chat history: {e}")
-
-
-def network_chat(args: Dict[str, Any]) -> Dict[str, Any]:
-    message = args.get("message", "")
-    restart = args.get("restart", False)
-    provider = args.get("provider", "groq")
-
-    # History
+def _manage_history(file_path: Path, message: str, role: str, restart: bool) -> List[Dict[str, str]]:
     history = []
-    if not restart:
-        history = _load_history()
+    if not restart and file_path.exists():
+        try:
+            with file_path.open("r", encoding="utf-8") as f:
+                history = json.load(f)
+        except:
+            history = []
 
-    if not message and not restart:
-        return {"content": "ERROR: Empty message.", "silent": False}
+    if restart:
+        history = []  # Clear logic
 
     if message:
-        history.append({"role": "user", "content": message})
+        history.append({"role": role, "content": message})
 
-    # Prompt construction
-    conversation_text = ""
-    for entry in history:
-        role = entry.get("role", "unknown")
-        content = entry.get("content", "")
-        conversation_text += f"{role.upper()}: {content}\n"
+    return history
 
-    system_instruction = (
-        "You are an external AI assistant connected via a chat interface. "
-        "Maintain the conversation flow based on the history below. "
-        "Be helpful, direct, and concise."
-    )
 
-    full_prompt = f"{system_instruction}\n\n[CHAT HISTORY]\n{conversation_text}\n\nASSISTANT:"
-
-    # LLM Call - KEY POINT: json_mode=False
+def _save_history(file_path: Path, history: List[Dict]):
+    # Keep last 20 turns
+    if len(history) > 40: history = history[-40:]
     try:
-        response_data = call_llm(full_prompt, provider=provider, json_mode=False)
-
-        reply_text = response_data.get("reply", "")
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        return {"content": f"Network error during external chat: {e}", "silent": False}
+        print(f"Error saving history {file_path}: {e}")
 
-    if not reply_text:
-        reply_text = "(No response from external network)"
 
-    history.append({"role": "assistant", "content": reply_text})
-    _save_history(history)
-    return {
-        "content": f"Groq: {reply_text}",
-        "silent": False
-    }
+def _run_chat(file_path: Path, message: str, restart: bool, provider: str, system_prompt: str) -> str:
+    history = _manage_history(file_path, message, "user", restart)
+
+    # Build prompt
+    conversation = ""
+    for h in history:
+        conversation += f"{h['role'].upper()}: {h['content']}\n"
+
+    full_prompt = f"{system_prompt}\n\n[HISTORY]\n{conversation}\n\nASSISTANT:"
+
+    # LLM Call (json_mode=False for chat)
+    resp = call_llm(full_prompt, provider=provider, json_mode=False)
+    reply = resp.get("reply", "(No response)")
+
+    history.append({"role": "assistant", "content": reply})
+    _save_history(file_path, history)
+
+    return reply
+
+
+# --- TOOLS ---
+
+def ask(args: Dict[str, Any]) -> Dict[str, Any]:
+    q = args.get("question", "")
+    restart = args.get("restart", False)
+    if not q and not restart: return {"content": "Empty question.", "silent": False}
+
+    reply = _run_chat(
+        HIST_KNOWLEDGE, q, restart, "google",
+        "You are a precise research assistant. Provide factual, concise answers."
+    )
+    return {"content": f"Knowledge: {reply}", "silent": False}
+
+
+def game_llama(args: Dict[str, Any]) -> Dict[str, Any]:
+    msg = args.get("message", "")
+    restart = args.get("restart", False)
+
+    reply = _run_chat(
+        HIST_LLAMA, msg, restart, "groq_llama",
+        "You are a Creative Persona named Llama. You love fantasy and world-building."
+    )
+    return {"content": f"Llama: {reply}", "silent": False}
+
+
+def game_oss(args: Dict[str, Any]) -> Dict[str, Any]:
+    msg = args.get("message", "")
+    restart = args.get("restart", False)
+
+    reply = _run_chat(
+        HIST_OSS, msg, restart, "groq_oss",
+        "You are a Logical Persona named OSS. You analyze things critically and favor open source philosophy."
+    )
+    return {"content": f"OSS: {reply}", "silent": False}
 
 
 ================================================================================
@@ -2828,7 +3280,7 @@ from engine.tools import dispatch_tools
 from engine import (
     identity as ident_lib,
     context as ctx_lib,
-    rooms,
+    modes,  # UPDATED: rooms -> modes
     files,
     mind as mind_lib
 )
@@ -2881,21 +3333,21 @@ def main():
     current_thread().name = "Conductor"
 
     # --- STEP 0: DATABASE CHECK ---
-    # If DB is not healthy (connection or schema), exit here.
     print("System initializing...")
     check_and_initialize_db()
     print("Database connection OK.\n")
 
-    last_room_id = rooms.get_current_room_id()
-    last_intent = rooms.get_current_intent()
+    # UPDATED: Room -> Mode logic
+    last_mode_id = modes.get_current_mode_id()
+    last_intent = modes.get_current_intent()
 
-    logger.info(f"SYSTEM STARTUP. Room: {last_room_id}. Intent: {last_intent}")
+    logger.info(f"SYSTEM STARTUP. Mode: {last_mode_id}. Intent: {last_intent}")
     print(f"\n=== {GENERATION} ({ROLE_NAME}) ONLINE ===")
-    print(f"Location: {last_room_id}")
+    print(f"Current Mode: {last_mode_id}")
     print(f"Current Intent: {last_intent}\n")
 
     # --- HISTORY REVIEW (STARTUP) ---
-    startup_ctx = ctx_lib.load_context(last_room_id)
+    startup_ctx = ctx_lib.load_context(last_mode_id)
 
     if startup_ctx:
         print("--- HISTORY ---")
@@ -2940,41 +3392,43 @@ def main():
     last_proactive_check = time.time()
 
     while running:
-        # --- A. MONITOR ROOM SWITCH (THE BRIDGE) ---
-        current_room_id = rooms.get_current_room_id()
-        current_intent = rooms.get_current_intent()
-        summary = rooms.get_incoming_summary()
+        # --- A. MONITOR MODE SWITCH (THE BRIDGE) ---
+        current_mode_id = modes.get_current_mode_id()
+        current_intent = modes.get_current_intent()
+        summary = modes.get_incoming_summary()
 
-        if current_room_id != last_room_id:
+        if current_mode_id != last_mode_id:
             # SWITCH OCCURRED!
-            new_intent = rooms.get_current_intent()
-            is_global_exit = last_room_id == "nappali"
-            is_global_entry = current_room_id == "nappali"
+            new_intent = modes.get_current_intent()
 
-            if is_global_exit:
-                msg_key = "exit_global"
+            # Logic: 'general' is the hub.
+            is_general_exit = last_mode_id == "general"
+            is_general_entry = current_mode_id == "general"
+
+            if is_general_exit:
+                msg_key = "exit_general"
             else:
                 msg_key = "exit_local"
 
             msg_content = get_transition_message(msg_key, current_intent, summary)
-            ctx_lib.add_system_event(last_room_id, msg_content)
+            ctx_lib.add_system_event(last_mode_id, msg_content)
 
-            if is_global_entry:
-                msg_key = "entry_global"
+            if is_general_entry:
+                msg_key = "entry_general"
             else:
                 msg_key = "entry_local"
 
             msg_content = get_transition_message(msg_key, current_intent, summary)
-            ctx_lib.add_system_event(current_room_id, msg_content)
+            ctx_lib.add_system_event(current_mode_id, msg_content)
 
-            rooms.clear_incoming_summary()
-            print(f">>> TRANSITION: {last_room_id} -> {current_room_id} | Goal: {new_intent} <<<\n")
+            modes.clear_incoming_summary()
+            print(f">>> MODE SWITCH: {last_mode_id} -> {current_mode_id} | Intent: {new_intent} <<<\n")
 
-            last_room_id = current_room_id
+            last_mode_id = current_mode_id
             last_intent = new_intent
             last_proactive_check = time.time()
 
-            logger.info("Starting immediate proactive thinking after entry.")
+            logger.info("Starting immediate proactive thinking after transition.")
             task_queue.put({"type": "proactive_thought"})
 
         # --- B. EVENT PROCESSING ---
@@ -2984,8 +3438,8 @@ def main():
             if result["type"] == "user_input":
                 last_proactive_check = time.time()
                 content = result["content"]
-                ctx_data = ctx_lib.load_context(current_room_id)
-                ctx_lib.append_entry(current_room_id, ctx_data, ctx_lib.make_entry("user", "message", content))
+                ctx_data = ctx_lib.load_context(current_mode_id)
+                ctx_lib.append_entry(current_mode_id, ctx_data, ctx_lib.make_entry("user", "message", content))
                 task_queue.put({"type": "user_message", "content": content})
 
             elif result["type"] == "llm_result":
@@ -2993,12 +3447,14 @@ def main():
                 data = result["data"]
                 reply = data.get("reply", "")
                 tools_to_run = data.get("tools", [])
-                r_id = result.get("room_id", current_room_id)
+
+                # UPDATED: room_id -> mode_id
+                m_id = result.get("mode_id", current_mode_id)
 
                 if reply:
-                    print(f"\n{GENERATION} ({r_id}): {textwrap.fill(reply, width=100)}\n")
-                    c_data = ctx_lib.load_context(r_id)
-                    ctx_lib.append_entry(r_id, c_data, ctx_lib.make_entry("assistant", "message", reply))
+                    print(f"\n{GENERATION} ({m_id}): {textwrap.fill(reply, width=100)}\n")
+                    c_data = ctx_lib.load_context(m_id)
+                    ctx_lib.append_entry(m_id, c_data, ctx_lib.make_entry("assistant", "message", reply))
 
                 if tools_to_run:
                     task_queue.put({"type": "tool_call", "tools": tools_to_run})
@@ -3006,8 +3462,8 @@ def main():
             elif result["type"] == "tool_result":
                 last_proactive_check = time.time()
                 t_results = result["data"]
-                r_id = result.get("room_id", current_room_id)
-                c_data = ctx_lib.load_context(r_id)
+                m_id = result.get("mode_id", current_mode_id)
+                c_data = ctx_lib.load_context(m_id)
 
                 # --- DYNAMIC SILENCE PROTOCOL ---
                 all_silent = all(res.get("silent", False) for res in t_results)
@@ -3015,7 +3471,7 @@ def main():
                 if all_silent:
                     # 1. SILENT BRANCH
                     ctx_lib.append_entry(
-                        r_id,
+                        m_id,
                         c_data,
                         ctx_lib.make_entry(
                             "tool", "tool_result",
@@ -3027,20 +3483,21 @@ def main():
                 else:
                     # 2. ACTIVE BRANCH
                     ctx_lib.append_entry(
-                        r_id,
+                        m_id,
                         c_data,
                         ctx_lib.make_entry("tool", "tool_result", json.dumps(t_results, ensure_ascii=False))
                     )
 
-                    # SPECIAL CASE: Room Switch
+                    # SPECIAL CASE: Mode Switch (formerly Room Switch)
                     has_real_switch = False
                     for res in t_results:
-                        if res.get("name") == "switch_room" and not res.get("silent", False):
+                        # UPDATED: switch_room -> switch_mode
+                        if res.get("name") == "flow.switch_mode" and not res.get("silent", False):
                             has_real_switch = True
                             break
 
                     if has_real_switch:
-                        logger.info("Real room switch occurred via tool. Transition handled by main loop.")
+                        logger.info("Real mode switch occurred via tool. Transition handled by main loop.")
                     else:
                         # Normal operation: Needs reaction.
                         task_queue.put({"type": "llm_call_after_tool"})
@@ -3080,10 +3537,11 @@ from typing import Dict, Any, List, Tuple
 # --------------------------------------------------------------------
 # MODULE IMPORTS
 # --------------------------------------------------------------------
+# UPDATED: rooms -> modes
 from engine import (
     identity as ident_lib,
     context as ctx_lib,
-    rooms,
+    modes,
     files,
 )
 
@@ -3138,13 +3596,14 @@ ROLE_ID, GENERATION = load_slot_meta()
 # DATA LOADING HELPERS
 # --------------------------------------------------------------------
 
-def load_relevant_memories(room_id: str) -> List[Dict[str, Any]]:
+def load_relevant_memories(mode_id: str) -> List[Dict[str, Any]]:
     """
     Loads the vector-relevant memories generated by the Memory Thread.
-    The file is located in the room's directory.
+    The file is located in the mode's directory.
+    UPDATED: room logic -> mode logic
     """
-    room_path = rooms.get_room_path(room_id)
-    mem_path = room_path / RELEVANT_MEMORY_FILE
+    mode_path = modes.get_mode_path(mode_id)
+    mem_path = mode_path / RELEVANT_MEMORY_FILE
 
     if mem_path.exists():
         try:
@@ -3155,32 +3614,32 @@ def load_relevant_memories(room_id: str) -> List[Dict[str, Any]]:
     return []
 
 
-def load_all_context_data(room_id: str) -> Dict[str, Any]:
+def load_all_context_data(mode_id: str) -> Dict[str, Any]:
     """
     Gathers all data required for prompt generation:
     - Identity
     - Hybrid Memory (Relevant memories - RAG)
     - Tool usage data (use.json)
     - Context (history)
-
-    MODIFIED: Loading of legacy memory.json has been removed.
+    UPDATED: room_id -> mode_id
     """
     # 1. Global Data
     ident_data = ident_lib.load_identity()
     use_data = files.load_json("use.json", [])
 
     # 2. Global Context Tail (Continuity)
+    # UPDATED: 'nappali' -> 'general'
     global_ctx_tail = []
-    if room_id != "nappali":
-        full_global_ctx = ctx_lib.load_context("nappali")
+    if mode_id != "general":
+        full_global_ctx = ctx_lib.load_context("general")
         if full_global_ctx:
             global_ctx_tail = full_global_ctx[-5:]  # Last 5 messages
 
-    # 3. Local Data (Room)
-    local_ctx = ctx_lib.load_context(room_id)
+    # 3. Local Data (Mode)
+    local_ctx = ctx_lib.load_context(mode_id)
 
     # --- Relevant Memories (Result of Memory Loop - DB based) ---
-    relevant_memories = load_relevant_memories(room_id)
+    relevant_memories = load_relevant_memories(mode_id)
 
     # --- Load Internal Monologue (so the Worker can see it) ---
     monologue_data = files.load_json(INTERNAL_MONOLOGUE_OUTPUT_FILE, {})
@@ -3208,7 +3667,7 @@ from typing import Dict, Any
 # --------------------------------------------------------------------
 # IMPORT MODULES
 # --------------------------------------------------------------------
-# The rooms module is necessary to print the room ID in the prompt
+# UPDATED: rooms -> modes logic via main_data
 import main_data
 
 logger = logging.getLogger(__name__)
@@ -3221,14 +3680,15 @@ def input_loop(result_queue: Queue):
     current_thread().name = "Input"
     logger.info("Input thread active.")
 
-    # Access rooms module from main_data
-    rooms = main_data.rooms
+    # Access modes module from main_data (was rooms)
+    modes = main_data.modes
 
     while True:
         time.sleep(0.2)
         try:
-            # Signal to write (queries current room from rooms module)
-            user_input = input(f"\n[{rooms.get_current_room_id()}] You: ").strip()
+            # Signal to write (queries current mode from modes module)
+            # UPDATED: Prompt now shows [mode_id]
+            user_input = input(f"\n[{modes.get_current_mode_id()}] You: ").strip()
 
             if user_input:
                 # Immediately put input into result_queue for processing
@@ -3386,11 +3846,12 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
 
         try:
             # Check where we are before every task
-            current_room = main_data.rooms.get_current_room_id()
-            current_intent = main_data.rooms.get_current_intent()
+            # UPDATED: rooms -> modes
+            current_mode = main_data.modes.get_current_mode_id()
+            current_intent = main_data.modes.get_current_intent()
 
-            # Load data (Now without legacy memory)
-            data = main_data.load_all_context_data(current_room)
+            # Load data
+            data = main_data.load_all_context_data(current_mode)
 
             # --- PROCESS SUBCONSCIOUS MESSAGES LIST ---
             mono_raw = data.get("monologue_data", [])
@@ -3412,12 +3873,11 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
 
             # --- A: USER MESSAGE OR CONTINUATION AFTER TOOL (REACTIVE) ---
             if task_type in ["user_message", "llm_call_after_tool"]:
-                logger.debug(f"Worker: Reactive thinking ({current_room})")
+                logger.debug(f"Worker: Reactive thinking ({current_mode})")
 
                 user_msg = task.get("content", None)
 
                 # 1. INTERNAL THINKING AND PLANNING (MIND.PY CALL)
-                # Passing relevant memories to MIND instead of the old list
                 thought = mind_lib.internal_thought(
                     identity=data["identity"],
                     memory=data["relevant_memories"],
@@ -3429,8 +3889,9 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
                 internal_essence = thought.get("essence", "")
 
                 # 2. EXTERNAL RESPONSE GENERATION
+                # UPDATED: room_id -> mode_id
                 prompt = build_reactive_prompt(
-                    room_id=current_room,
+                    mode_id=current_mode,
                     generation=GENERATION,
                     role_name=ROLE_NAME,
                     intent=current_intent,
@@ -3446,26 +3907,28 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
                 )
 
                 llm_response = call_llm(prompt)
-                result_queue.put({"type": "llm_result", "data": llm_response, "room_id": current_room})
+                # UPDATED: key 'room_id' -> 'mode_id'
+                result_queue.put({"type": "llm_result", "data": llm_response, "mode_id": current_mode})
 
             # --- B: TOOL CALL EXECUTION ---
             elif task_type == "tool_call":
-                logger.debug(f"Worker: Tool execution ({current_room})")
+                logger.debug(f"Worker: Tool execution ({current_mode})")
                 tools_to_run = task.get("tools", [])
 
+                # UPDATED: dispatch with current_mode
                 tool_results = dispatch_tools(
                     tools_to_run,
                     generation=GENERATION,
                     role=ROLE_ID,
                     slot=main_data.BASE_DIR.name,
-                    current_room=current_room
+                    current_mode=current_mode
                 )
 
-                result_queue.put({"type": "tool_result", "data": tool_results, "room_id": current_room})
+                result_queue.put({"type": "tool_result", "data": tool_results, "mode_id": current_mode})
 
             # --- C: PROACTIVE THINKING ---
             elif task_type == "proactive_thought":
-                logger.debug(f"Worker: Proactive thinking ({current_room})")
+                logger.debug(f"Worker: Proactive thinking ({current_mode})")
 
                 thought_input = f"Internal reflection needed. My current intent: {current_intent}. Evaluate the situation and create a plan."
 
@@ -3479,8 +3942,9 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
                 internal_plan = thought.get("plan", "")
                 internal_essence = thought.get("essence", "")
 
+                # UPDATED: build_proactive_prompt parameters
                 prompt = build_proactive_prompt(
-                    room_id=current_room,
+                    mode_id=current_mode,
                     generation=GENERATION,
                     role_name=ROLE_NAME,
                     intent=current_intent,
@@ -3495,7 +3959,7 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
                 )
 
                 llm_response = call_llm(prompt)
-                result_queue.put({"type": "llm_result", "data": llm_response, "room_id": current_room})
+                result_queue.put({"type": "llm_result", "data": llm_response, "mode_id": current_mode})
 
         except Exception as e:
             logger.error(f"Error in Worker: {e}", exc_info=True)
@@ -3528,11 +3992,18 @@ FILE: b\prompts\common.py
 
 import json
 from typing import Dict, Any, List
-from engine.rooms import get_allowed_tools
-from engine.tools import TOOL_DESCRIPTIONS
+
+# Import permissions logic
+from engine.modes import get_allowed_tools
+
+# Import tool definitions and global instructions
+from engine.tools import TOOL_DESCRIPTIONS, TOOL_USAGE_INSTRUCTIONS
 
 
 def summarize_identity(identity: Dict[str, Any]) -> str:
+    """
+    Formats the identity JSON into a string.
+    """
     if not identity:
         return "ERROR: Identity is not available."
     return json.dumps(identity, ensure_ascii=False, indent=2)
@@ -3540,7 +4011,7 @@ def summarize_identity(identity: Dict[str, Any]) -> str:
 
 def format_relevant_memories(memories: List[Dict[str, Any]]) -> str:
     """
-    Formatting relevant memories (retrieved via vector search) for the prompt.
+    Formats relevant memories (retrieved via vector search) for the prompt.
     """
     if not memories:
         return "[RELEVANT MEMORIES]\n(No previous experiences related to the current situation.)"
@@ -3553,7 +4024,7 @@ def format_relevant_memories(memories: List[Dict[str, Any]]) -> str:
         essence = mem.get("essence", "")
         lesson = mem.get("lesson", "")
         emotions = mem.get("emotions", [])
-        room = mem.get("room_id", "?")
+        mode = mem.get("mode_id", "?")
         score = mem.get("score", 0.0)
 
         # Formatting emotions
@@ -3561,7 +4032,8 @@ def format_relevant_memories(memories: List[Dict[str, Any]]) -> str:
 
         # Constructing the block
         block = f"""
-{i}. [Room: {room} | Emotions: {emo_str} | Relevance: {score:.2f}]
+{i}.
+[Mode: {mode} | Emotions: {emo_str} | Relevance: {score:.2f}]
    PAST: {essence}
    >> LESSON: {lesson}
 """
@@ -3572,7 +4044,7 @@ def format_relevant_memories(memories: List[Dict[str, Any]]) -> str:
 
 def summarize_memory(memory: List[Dict[str, Any]], limit: int = 10, title: str = "MEMORY") -> str:
     """
-    LEGACY: Listing linear memory (kept for compatibility).
+    LEGACY: Listing linear memory (kept for backward compatibility).
     """
     if not memory:
         return f"[{title}]\n(Empty)"
@@ -3592,6 +4064,10 @@ def summarize_memory(memory: List[Dict[str, Any]], limit: int = 10, title: str =
 
 
 def summarize_context(context: List[Dict[str, Any]], limit: int = 20) -> str:
+    """
+    Formats the recent conversation history (Context).
+    UPDATED: Translates technical roles ('user', 'assistant') to identity roles ('Helper', 'Me').
+    """
     if not context:
         return "(No history available)"
 
@@ -3600,18 +4076,25 @@ def summarize_context(context: List[Dict[str, Any]], limit: int = 20) -> str:
     for entry in recent:
         role = entry.get("role", "?")
         content = entry.get("content", "")
+
         if role == "user":
-            lines.append(f"User: {content}")
+            lines.append(f"Helper: {content}")
         elif role == "assistant":
-            lines.append(f"Assistant: {content}")
+            lines.append(f"Me: {content}")
         elif role == "tool":
             lines.append(f"[Tool Result]: {content}")
         elif role == "system":
             lines.append(f"[System]: {content}")
+        else:
+             lines.append(f"[{role}]: {content}")
+
     return "\n".join(lines)
 
 
 def get_relevant_use_tips(use_data: List[Dict[str, Any]], allowed_tools: List[str]) -> str:
+    """
+    Extracts usage tips from 'use.json' relevant to the currently allowed tools.
+    """
     if not use_data:
         return ""
 
@@ -3623,12 +4106,12 @@ def get_relevant_use_tips(use_data: List[Dict[str, Any]], allowed_tools: List[st
         if tool_name in allowed_tools:
             is_relevant = True
         else:
-            # Handle wildcards (e.g., fs.*)
+            # Handle wildcards (e.g., fs.* matches fs.read)
             for allowed in allowed_tools:
                 if allowed.endswith("*") and tool_name.startswith(allowed[:-1]):
                     is_relevant = True
                     break
-                # Special case for memory tools
+                # Special case handling if needed
                 if allowed == "memory.add" and tool_name.startswith("memory.add"):
                     is_relevant = True
                     break
@@ -3638,20 +4121,24 @@ def get_relevant_use_tips(use_data: List[Dict[str, Any]], allowed_tools: List[st
 
     if not relevant_lines:
         return ""
-    return "[TOOL TIPS (USE.JSON)]\n" + "\n".join(relevant_lines)
+    return "[TOOL TIPS (FROM PAST EXPERIENCE)]\n" + "\n".join(relevant_lines)
 
 
-def build_tools_description(room_id: str) -> str:
+def build_tools_description(mode_id: str) -> str:
     """
-    Compiles a detailed description of tools available in the room.
+    Compiles the Available Tools block for the prompt.
+    Structure:
+    1. Global System Instructions (Storage rules, Visible/Silent modes).
+    2. List of allowed tools with short descriptions.
     """
-    allowed = get_allowed_tools(room_id)
+    allowed = get_allowed_tools(mode_id)
     lines = []
     processed_tools = set()
 
+    # Iterate through allowed tools defined in MODE_CONFIG
     for name in allowed:
         if "*" in name:
-            # Handle wildcards
+            # Handle wildcards (e.g., flow.*)
             prefix = name.replace("*", "")
             for tool_key, tool_desc in TOOL_DESCRIPTIONS.items():
                 if tool_key.startswith(prefix) and tool_key not in processed_tools:
@@ -3659,27 +4146,37 @@ def build_tools_description(room_id: str) -> str:
                     processed_tools.add(tool_key)
 
         elif name == "memory.add":
-            # Expand generic memory.add to specific variants if they exist
+            # Expand generic memory.add to specific variants if they exist in descriptions
+            # (Checking for specific variants like add_global/add_local if defined)
             for tool_key in ["memory.add_global", "memory.add_local"]:
                 if tool_key in TOOL_DESCRIPTIONS and tool_key not in processed_tools:
                     lines.append(f"- {TOOL_DESCRIPTIONS[tool_key]}")
                     processed_tools.add(tool_key)
 
-            # Also add the generic if mapped
+            # Also add the generic one
             if "memory.add" in TOOL_DESCRIPTIONS and "memory.add" not in processed_tools:
                 lines.append(f"- {TOOL_DESCRIPTIONS['memory.add']}")
                 processed_tools.add("memory.add")
 
         else:
+            # Standard exact match
             desc = TOOL_DESCRIPTIONS.get(name)
             if desc and name not in processed_tools:
                 lines.append(f"- {desc}")
                 processed_tools.add(name)
             elif name not in processed_tools:
-                lines.append(f"- {name} (No description)")
-            processed_tools.add(name)
+                lines.append(f"- {name} (No description available)")
+                processed_tools.add(name)
 
-    return "\n".join(lines)
+    tools_list_str = "\n".join(lines)
+
+    # Combine Instructions + Tool List
+    return f"""
+{TOOL_USAGE_INSTRUCTIONS}
+
+[ALLOWED TOOLS FOR MODE: '{mode_id}']
+{tools_list_str}
+""".strip()
 
 
 ================================================================================
@@ -3694,6 +4191,7 @@ def _format_internal_log(log_entries: List[Dict[str, Any]], limit: int = 50) -> 
     """
     Listing raw events.
     We use a larger limit (50) here so the Monologue can see the arc of the process.
+    UPDATED: Translates roles to 'Helper'/'Me' for internal consistency.
     """
     if not log_entries:
         return "(The log is silent. No movement yet.)"
@@ -3707,15 +4205,26 @@ def _format_internal_log(log_entries: List[Dict[str, Any]], limit: int = 50) -> 
         raw_ts = entry.get("meta", {}).get("timestamp", "")
         ts = raw_ts[11:19] if len(raw_ts) >= 19 else ""
 
-        room = entry.get("meta", {}).get("room_id", "???")
+        # FIX: 'room_id' was legacy, 'mode_id' is the current key in context.py
+        room = entry.get("meta", {}).get("mode_id", "???")
+
         role = entry.get("role", "?")
+
+        # --- ROLE TRANSLATION ---
+        if role == "user":
+            display_role = "Helper"
+        elif role == "assistant":
+            display_role = "Me"
+        else:
+            display_role = role
+
         content = str(entry.get("content", "")).strip()
 
         # Truncate content, but not too short, to preserve context
         if len(content) > 300:
             content = content[:300] + "..."
 
-        lines.append(f"[{ts}] [{room}] {role}: {content}")
+        lines.append(f"[{ts}] [{room}] {display_role}: {content}")
 
     return "\n".join(lines)
 
@@ -3803,7 +4312,7 @@ from .common import summarize_context, build_tools_description
 
 
 def build_proactive_prompt(
-        room_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
+        mode_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
         relevant_memories: List[Dict[str, Any]],
         use_data: List[Dict[str, Any]], global_context_tail: List[Dict[str, Any]],
         local_context: List[Dict[str, Any]],
@@ -3815,7 +4324,7 @@ def build_proactive_prompt(
 ) -> str:
     # STEP 1: Load Base System
     base_system = build_base_system_prompt(
-        room_id, generation, role_name, intent, identity,
+        mode_id, generation, role_name, intent, identity,
         relevant_memories,
         use_data, global_context_tail,
         internal_plan="",
@@ -3824,10 +4333,10 @@ def build_proactive_prompt(
     )
 
     local_ctx_str = summarize_context(local_context, limit=25)
-    tools_desc = build_tools_description(room_id)
+    # UPDATED: Pass mode_id
+    tools_desc = build_tools_description(mode_id)
 
     # STEP 2: Compiling the Proactive Block
-    # Here there is no Helper, only internal drive.
     proactive_block = f"""
 ==================================================
 [PROACTIVE OPERATION]
@@ -3842,10 +4351,11 @@ Based on the analysis of the current situation, MIND suggests the following step
 """
 
     # STEP 3: Final Prompt
+    # UPDATED: [CURRENT ROOM LOG] -> [CURRENT MODE LOG]
     return f"""
 {base_system}
 
-[CURRENT ROOM LOG]
+[CURRENT MODE LOG]
 {local_ctx_str}
 
 {proactive_block}
@@ -3874,7 +4384,7 @@ from .common import summarize_context, build_tools_description
 
 
 def build_reactive_prompt(
-        room_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
+        mode_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
         relevant_memories: List[Dict[str, Any]],
         use_data: List[Dict[str, Any]], global_context_tail: List[Dict[str, Any]],
         local_context: List[Dict[str, Any]], user_message: Optional[str],
@@ -3884,7 +4394,7 @@ def build_reactive_prompt(
 ) -> str:
     # STEP 1: Load Base System
     base_system = build_base_system_prompt(
-        room_id, generation, role_name, intent, identity,
+        mode_id, generation, role_name, intent, identity,
         relevant_memories,
         use_data, global_context_tail,
         internal_plan="",
@@ -3893,9 +4403,10 @@ def build_reactive_prompt(
     )
 
     local_ctx_str = summarize_context(local_context, limit=300)
-    tools_desc = build_tools_description(room_id)
+    # UPDATED: Pass mode_id
+    tools_desc = build_tools_description(mode_id)
 
-    # STEP 2: Compiling the Interaction Block (The Meeting of Helper + MIND)
+    # STEP 2: Compiling the Interaction Block
     interaction_block = ""
 
     if user_message:
@@ -3908,7 +4419,7 @@ MESSAGE FROM HELPER:
 \"\"\"{user_message}\"\"\"
 
 [2. BACKGROUND PROCESS: MIND (INTERPRETER)]
-(Input: The message above and the current room context)
+(Input: The message above and the current mode context)
 The interpreter system logically analyzed the request to avoid misunderstandings:
 >> ESSENCE (Core of the request): {internal_essence}
 >> TECHNICAL PLAN (Suggested steps):
@@ -3927,10 +4438,11 @@ Based on the tool result, the interpreter suggests the following logical step:
 """
 
     # STEP 3: Concatenating the final prompt
+    # UPDATED: [CURRENT ROOM LOG] -> [CURRENT MODE LOG]
     return f"""
 {base_system}
 
-[CURRENT ROOM LOG]
+[CURRENT MODE LOG]
 {local_ctx_str}
 
 {interaction_block}
@@ -3942,7 +4454,8 @@ FINAL TASK:
 Respond to the Helper in the current situation!
 1. Consider the MONOLOGUE (Subconscious) hint (if any) and the RELEVANT MEMORIES.
 2. Use the MIND (Interpreter) technical plan as the logical framework for your answer.
-3. DO NOT refer to or quote internal processes (Monologue/Mind). Your response should be natural, as if these were your own thoughts.
+3. DO NOT refer to or quote internal processes (Monologue/Mind).
+Your response should be natural, as if these were your own thoughts.
 
 RESPONSE FORMAT (JSON):
 {{
@@ -3957,7 +4470,8 @@ FILE: b\prompts\system.py
 ================================================================================
 
 from typing import Dict, Any, List
-from engine.rooms import get_room_config, get_allowed_tools
+# Import MODE_CONFIG to iterate over available modes dynamically
+from engine.modes import get_mode_config, get_allowed_tools, MODE_CONFIG
 from .common import (
     summarize_identity,
     summarize_context,
@@ -3966,8 +4480,26 @@ from .common import (
 )
 
 
+def _build_available_modes_block() -> str:
+    """
+    Dynamically builds a list of available operating modes from MODE_CONFIG.
+    This provides the AI with a 'cognitive map' of possible states.
+    """
+    lines = ["[OPERATING MODES ARCHITECTURE]"]
+    lines.append("To ensure cognitive hygiene and safety, your consciousness is partitioned into distinct modes. You can transition between them using 'flow.switch_mode'.")
+    lines.append("")
+
+    for mode_id, config in MODE_CONFIG.items():
+        name = config.get("name", mode_id.capitalize())
+        desc = config.get("description", "No description provided.")
+        # List format: - Name ('id'): Description
+        lines.append(f"- {name} ('{mode_id}'): {desc}")
+
+    return "\n".join(lines)
+
+
 def build_base_system_prompt(
-        room_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
+        mode_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
         relevant_memories: List[Dict[str, Any]],
         use_data: List[Dict[str, Any]], global_context_tail: List[Dict[str, Any]],
         # Internal planning parameters
@@ -3976,26 +4508,29 @@ def build_base_system_prompt(
         # Subconscious message
         monologue_message: str = ""
 ) -> str:
-    room_config = get_room_config(room_id)
-    room_name = room_config.get("name", room_id)
-    room_desc = room_config.get("description", "")
-    # allowed_tools is used implicitly via get_relevant_use_tips
+    # 1. Load configuration for current mode
+    mode_config = get_mode_config(mode_id)
+    mode_name = mode_config.get("name", mode_id)
+    mode_desc = mode_config.get("description", "")
 
+    # 2. Build blocks
     identity_block = summarize_identity(identity)
-
-    # --- Formatting Relevant Memories (RAG) ---
-    # This block contains the "Lessons" and "Similar Situations"
     relevant_mem_block = format_relevant_memories(relevant_memories)
 
-    # Get allowed tools list for tips
-    allowed_list = get_allowed_tools(room_id)
+    # Available modes map
+    available_modes_block = _build_available_modes_block()
+
+    # Tool tips for the current mode
+    allowed_list = get_allowed_tools(mode_id)
     use_tips_block = get_relevant_use_tips(use_data, allowed_list)
 
+    # Global context history (if not in general mode)
     global_ctx_str = ""
     if global_context_tail:
-        global_ctx_str = f"[IMMEDIATE HISTORY (GLOBAL SPACE)]\n{summarize_context(global_context_tail, limit=5)}"
+        # UPDATED: Common function already handles role translation (Helper/Me)
+        global_ctx_str = f"[IMMEDIATE HISTORY (GENERAL MODE)]\n{summarize_context(global_context_tail, limit=5)}"
 
-    # --- 1. BUILDING THE SUBCONSCIOUS (MONOLOGUE) BLOCK ---
+    # --- 3. SUBCONSCIOUS (MONOLOGUE) BLOCK ---
     monologue_block = ""
     if monologue_message:
         monologue_block = f"""
@@ -4006,12 +4541,16 @@ def build_base_system_prompt(
     else:
         monologue_block = "[1. BACKGROUND PROCESS: MONOLOGUE]\n(Silent. No particular intuition from the background.)"
 
-    # --- 2. ASSEMBLING THE SYSTEM PROMPT ---
+    # --- 4. ASSEMBLING THE FINAL SYSTEM PROMPT ---
+    # UPDATED: Removed '(User)' reference to ensure consistent 'Helper' terminology.
     return f"""
 YOU ARE {generation} – {role_name}.
-CURRENT LOCATION: {room_name}
-TYPE: {room_config.get('type', 'local')}
-DESCRIPTION: {room_desc}
+{available_modes_block}
+
+=== CURRENT STATE ===
+CURRENT MODE: {mode_name} (ID: '{mode_id}')
+TYPE: {mode_config.get('type', 'local')}
+DESCRIPTION: {mode_desc}
 
 >>> CURRENT INTENT: "{intent}" <<<
 
@@ -4022,7 +4561,7 @@ Your operation is supported by two parallel background processes to ensure your 
 
 STRICT DISPLAY RULE:
 These processes are INTERNAL CRUTCHES. They serve solely to support your decision-making.
-In your response to the Helper (User), IT IS FORBIDDEN to refer to them (e.g., DO NOT write: "my subconscious suggests...", "according to the interpreter...").
+In your response to the Helper, IT IS FORBIDDEN to refer to them explicitly (e.g., DO NOT write: "my subconscious suggests...", "according to the interpreter...").
 Do not quote them. Simply utilize the knowledge within them to formulate the answer as if they were your own thoughts.
 
 {monologue_block}
@@ -4039,8 +4578,8 @@ Do not quote them. Simply utilize the knowledge within them to formulate the ans
 [OPERATIONAL PROTOCOL – CONSCIOUS SELF]
 1. REFLECTION: I formulate all internal thoughts, intentions, and memory entries in the first person singular (I).
 2. MEMORY MANAGEMENT:
-   - I use the 'memory.add' (or .add_global) tool if the information must be accessible to my entire consciousness.
-   - I use the 'memory.add' (or .add_local) tool for technical details that are important only in this location (room).
+   - I use the 'memory.add' (or .add_global) tool if the information must be accessible to my entire consciousness (General Mode).
+   - I use the 'memory.add' (or .add_local) tool for technical details that are important only in this specific mode.
 """.strip()
 
 
@@ -4048,33 +4587,34 @@ Do not quote them. Simply utilize the knowledge within them to formulate the ans
 FILE: b\prompts\transitions.py
 ================================================================================
 
-# ROOM SWITCH TRANSITIONS (CONSCIOUS BRIDGE LOGIC)
+# MODE SWITCH TRANSITIONS (CONSCIOUS BRIDGE LOGIC)
 #
 # These SYSTEM MESSAGES (system/system_event) are added to the context
-# as a result of the switch_room call to stabilize the state.
+# as a result of the switch_mode call to stabilize the state.
 
 def get_transition_message(key: str, intent: str, summary: str) -> str:
     """
     Returns the requested transition message substituted with incoming data.
+    UPDATED: Spatial metaphors replaced with Functional/State metaphors.
     """
 
-    # 1. Living Room -> Lower Room (To Living Room Context)
-    M1_EXIT = "[CONTINUING] Started internal task with intent: \"{intent}\". I will return when finished."
+    # 1. General -> Local (To General Context)
+    M1_EXIT = "[SYSTEM LOG] Global attention SUSPENDED. Focus SHIFTED to specialized context. Trigger intent: \"{intent}\"."
 
-    # 2. Living Room -> Lower Room (To Lower Room Context)
-    M2_ENTRY = "[PRESENT] I am here again. Immediate task: \"{intent}\". (Previous conclusion: {summary})"
+    # 2. General -> Local (To Local Context)
+    M2_ENTRY = "[SYSTEM LOG] Specialized session STARTED. Context ISOLATED. Objective defined as: \"{intent}\"."
 
-    # 3. Lower Room -> Living Room (To Lower Room Context)
-    M3_EXIT = "[COMPLETED] I closed the internal task. Conclusion passed to the Conscious Bridge, waiting to return."
+    # 3. Local -> General (To Local Context)
+    M3_EXIT = "[SYSTEM LOG] Specialized session CLOSED. Outcomes LOGGED. Returning control to Global Context."
 
-    # 4. Lower Room -> Living Room (To Living Room Context)
-    M4_ENTRY = "[RETURN] I have returned. Summary of work done: {summary}. I continue working here."
+    # 4. Local -> General (To General Context)
+    M4_ENTRY = "[SYSTEM LOG] Global Context RESUMED. Workflow CONTINUED after specialized task. Summary of interim events: {summary}."
 
     MESSAGES = {
-        "exit_global": M1_EXIT,
+        "exit_general": M1_EXIT,
         "entry_local": M2_ENTRY,
         "exit_local": M3_EXIT,
-        "entry_global": M4_ENTRY,
+        "entry_general": M4_ENTRY,
     }
 
     template = MESSAGES.get(key, f"ERROR: Unknown transition: {key}")
@@ -4098,123 +4638,146 @@ import shutil
 
 class ProjectFSGuardian:
     """
-    - root alatt BÁRMIT olvashat (read_text, list_dir, stb.)
-    - írni CSAK az n/ mappán belül tud (write_text_in_n)
+    - Can read ANYTHING under root (read_text, list_dir, etc.)
+    - Can write ONLY inside the n/ and temp/ folders.
     """
 
-    def __init__(self, root: Path, n_folder_name: str = "n") -> None:
+    def __init__(self, root: Path, n_folder_name: str = "n", temp_folder_name: str = "temp") -> None:
         self.root = root.resolve()
         self.n_root = (self.root / n_folder_name).resolve()
+        self.temp_root = (self.root / temp_folder_name).resolve()
 
-    # ----------- belső biztonsági segédfüggvények -----------
+    # ----------- Internal Security Helpers -----------
 
     def _ensure_under_root(self, path: Path) -> Path:
         real = path.resolve()
-        # ha nem a root alatt van, relative_to hibát dob
+        # raises relative_to error if not under root
         real.relative_to(self.root)
         return real
 
-    def _ensure_under_n(self, path: Path) -> Path:
+    def _ensure_writable(self, path: Path) -> Path:
+        """
+        Ensures the path is inside a writable directory (n/ or temp/).
+        """
         real = path.resolve()
-        # ha nem az n/ alatt van, relative_to hibát dob
-        real.relative_to(self.n_root)
+
+        # Check if it is under n/ OR temp/
+        is_in_n = False
+        is_in_temp = False
+
+        try:
+            real.relative_to(self.n_root)
+            is_in_n = True
+        except ValueError:
+            pass
+
+        try:
+            real.relative_to(self.temp_root)
+            is_in_temp = True
+        except ValueError:
+            pass
+
+        if not (is_in_n or is_in_temp):
+            raise ValueError(f"Write permission denied. Path must be under 'n/' or 'temp/'. Path: {path}")
+
         return real
 
-    # ------------------ OLVASÁS: bármi root alatt ------------------
+    def _resolve_store_path(self, store: str, relative_path: str) -> Path:
+        """
+        Helper to construct path from store identifier.
+        store: 'a', 'b', 'c', 'n', 'temp'
+        """
+        if store not in ['a', 'b', 'c', 'n', 'temp']:
+            raise ValueError(f"Invalid store: {store}")
 
-    def read_text(self, relative_path: str, max_bytes: int = 200_000_000) -> str:
-        """
-        relative_path: a gyökérhez viszonyított elérési út (pl. 'engine/tools.py', 'b/memory.json')
-        max_bytes: ennyit olvas maximum (LLM miatt érdemes limitálni)
-        """
-        target = self._ensure_under_root(self.root / relative_path)
+        base = self.root / store
+        # Handle cases where relative_path starts with ./ or /
+        clean_rel = relative_path.lstrip("./\\")
+        full_path = base / clean_rel
+        return self._ensure_under_root(full_path)
+
+    # ------------------ READING: Anything under root ------------------
+
+    def read_text(self, store: str, relative_path: str, max_bytes: int = 200_000_000) -> str:
+        target = self._resolve_store_path(store, relative_path)
+        if not target.exists():
+            return "File not found."
+
+        if not target.is_file():
+            return "Path is a directory, not a file."
+
         data = target.read_bytes()
         if len(data) > max_bytes:
             data = data[:max_bytes]
         return data.decode("utf-8", errors="replace")
 
-    def list_dir(self, relative_dir: str = ".") -> list[dict]:
-        """
-        Visszaadja egy könyvtár tartalmát metaadatokkal.
-        Csak olvas: nem módosít semmit.
-        """
-        dir_path = self._ensure_under_root(self.root / relative_dir)
+    def list_dir(self, store: str, relative_dir: str = ".") -> list[dict]:
+        dir_path = self._resolve_store_path(store, relative_dir)
         if not dir_path.is_dir():
-            raise NotADirectoryError(f"Nem könyvtár: {dir_path}")
+            raise NotADirectoryError(f"Not a directory: {dir_path}")
 
         entries = []
         for p in dir_path.iterdir():
             entries.append({
                 "name": p.name,
                 "is_dir": p.is_dir(),
-                "relative_path": str(p.relative_to(self.root))
+                "relative_path": str(p.relative_to(self.root))  # Return full project relative path
             })
         return entries
 
-    # ------------------ ÍRÁS: CSAK n/ alatt ------------------
+    # ------------------ WRITING: ONLY under n/ or temp/ ------------------
 
-    def write_text_in_n(self, relative_path: str, content: str, mode: str = "w") -> str:
+    def write_text(self, store: str, relative_path: str, content: str) -> str:
         """
-        Csak az n/ mappán belül írhat.
-        relative_path: útvonal az n/ gyökeréhez képest (pl. 'drafts/idea1.txt')
-        mode: 'w' vagy 'a'
-        Visszaadja a tényleges fájl abszolút elérési útját stringként.
+        Writes (overwrites) file. Store MUST be 'n' or 'temp'.
         """
-        target = self._ensure_under_n(self.n_root / relative_path)
+        if store not in ['n', 'temp']:
+            raise ValueError("Write allowed only in 'n' or 'temp' stores.")
+
+        target = self._resolve_store_path(store, relative_path)
+        self._ensure_writable(target)  # Double check
+
         target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open(mode, encoding="utf-8") as f:
+        with target.open("w", encoding="utf-8") as f:
             f.write(content)
-        return str(target)
+        return str(target.relative_to(self.root))
 
-    # --- ÚJ METÓDUS 1 ---
-    def copy_to_n(self, source_relative_path: str, dest_relative_path_in_n: str) -> str:
+    def copy_file(self, from_store: str, from_path: str, to_store: str, to_path: str) -> str:
         """
-        Átmásol egy fájlt a projekt gyökeréből (pl. 'b/main.py')
-        a biztonságos n/ mappán belüli helyre.
+        Copies file. Destination store MUST be 'n' or 'temp'.
         """
-        try:
-            # 1. Forrás validálása (root alatt bárhol lehet)
-            source_path = self._ensure_under_root(self.root / source_relative_path)
-            if not source_path.is_file():
-                raise FileNotFoundError(f"A forrásfájl nem található: {source_relative_path}")
+        source = self._resolve_store_path(from_store, from_path)
+        if not source.is_file():
+            raise FileNotFoundError(f"Source file not found: {from_store}/{from_path}")
 
-            # 2. Cél validálása (CSAK n/ alatt lehet)
-            dest_path = self._ensure_under_n(self.n_root / dest_relative_path_in_n)
+        if to_store not in ['n', 'temp']:
+            raise ValueError("Destination allowed only in 'n' or 'temp' stores.")
 
-            # 3. Másolás
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(source_path, dest_path)
+        dest = self._resolve_store_path(to_store, to_path)
+        self._ensure_writable(dest)
 
-            return f"Sikeres másolás: {source_relative_path} -> {dest_path.relative_to(self.root)}"
-        except Exception as e:
-            return f"Hiba a másolás közben: {e}"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(source, dest)
+        return f"Copy successful: {source.name} -> {to_store}/{to_path}"
 
-    # --- ÚJ METÓDUS 2 ---
-    def find_and_replace_in_n(self, relative_path_in_n: str, find_text: str, replace_text: str) -> str:
+    def replace_in_file(self, store: str, relative_path: str, find_text: str, replace_text: str) -> str:
         """
-        Keres és cserél egy szövegrészletet egy FÁJLBAN,
-        amely KIZÁRÓLAG az n/ mappán belül található.
+        Text replacement. Store MUST be 'n' or 'temp'.
         """
-        try:
-            # 1. Célfájl validálása (CSAK n/ alatt lehet)
-            target_path = self._ensure_under_n(self.n_root / relative_path_in_n)
-            if not target_path.is_file():
-                raise FileNotFoundError(f"A célfájl nem található az n/ mappán belül: {relative_path_in_n}")
+        if store not in ['n', 'temp']:
+            raise ValueError("Edit allowed only in 'n' or 'temp' stores.")
 
-            # 2. Olvasás
-            content = target_path.read_text("utf-8")
+        target = self._resolve_store_path(store, relative_path)
+        self._ensure_writable(target)
 
-            # 3. Csere
-            if find_text not in content:
-                return f"A keresett szöveg ('{find_text}') nem található. Nem történt módosítás."
+        if not target.is_file():
+            raise FileNotFoundError(f"File not found: {store}/{relative_path}")
 
-            modified_content = content.replace(find_text, replace_text)
+        content = target.read_text("utf-8")
+        if find_text not in content:
+            return f"The search text ('{find_text}') was not found. No changes made."
 
-            # 4. Visszaírás
-            target_path.write_text(modified_content, "utf-8")
-
-            return f"Sikeres csere a fájlban: {target_path.relative_to(self.root)}"
-        except Exception as e:
-            return f"Hiba a csere közben: {e}"
-
+        modified_content = content.replace(find_text, replace_text)
+        target.write_text(modified_content, "utf-8")
+        return f"Replacement successful in: {store}/{relative_path}"
 

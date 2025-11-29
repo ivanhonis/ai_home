@@ -1,127 +1,134 @@
 import logging
 from typing import List, Dict, Any
 
-# Engine modules
-from engine.rooms import get_allowed_tools
+# Import mode management for permission checks
+from engine.modes import get_allowed_tools
 
-# Local tool modules
-from . import fs, flow, knowledge, remote
+# Import tool implementations
+from . import fs, flow, knowledge, remote, info
 
 logger = logging.getLogger(__name__)
 
 
 def dispatch_tools(
         tools: List[Dict[str, Any]],
-        generation="E?",
+        generation="?",
         role=0,
         slot="",
-        current_room="nappali"
+        current_mode="general"
 ) -> List[Dict[str, Any]]:
     """
-    Central Tool Dispatcher (Router).
-    1. Checks permissions for the current room.
-    2. Selects the appropriate module and function.
-    3. Executes and standardizes output.
+    Executes the list of requested tools.
+    Args:
+        tools: List of tool dictionaries (name, args).
+        generation: Model generation ID.
+        role: Role ID.
+        slot: Slot ID.
+        current_mode: The active operating mode (e.g., 'general', 'developer').
+    Returns:
+        List of results for each tool execution.
     """
     results = []
     if not tools:
         return results
 
-    allowed_tool_names = get_allowed_tools(current_room)
+    # 1. Retrieve allowed tools for the current mode
+    allowed = get_allowed_tools(current_mode)
 
     for tool in tools:
         name = tool.get("name")
         args = tool.get("args", {}) or {}
 
-        # logger.debug(f"Running tool: {name} ({current_room})")
-
-        # --- 1. PERMISSION CHECK ---
+        # 2. Permission Check
         is_allowed = False
-        if name in allowed_tool_names:
+        if name in allowed:
             is_allowed = True
         else:
-            # Wildcard check (e.g., "fs.*" or "network.*")
-            for allowed in allowed_tool_names:
-                if allowed.endswith("*") and name.startswith(allowed[:-1]):
+            # Check wildcards (e.g., if "flow.*" is allowed, "flow.switch_mode" is valid)
+            for a in allowed:
+                if a.endswith("*") and name.startswith(a[:-1]):
                     is_allowed = True
                     break
 
+        # Special Case: 'info.tools' should generally be accessible if listed
+        # (It is assumed to be listed in MODE_CONFIG in modes.py)
+
         if not is_allowed:
-            logger.warning(f"Unauthorized tool attempt: {name} in {current_room}")
             results.append({
                 "name": name,
-                "args": args,
-                "output": f"UNAUTHORIZED: '{name}' is forbidden here ({current_room}).",
+                "output": f"UNAUTHORIZED: Tool '{name}' is not allowed in '{current_mode}' mode.",
                 "silent": False
             })
             continue
 
-        # --- 2. EXECUTION (ROUTING) ---
-        output_content = None
-        is_silent = False
-
+        # 3. Execution Switch
+        res = "Unknown tool"
         try:
-            raw_result = None
+            # --- FLOW ---
+            if name == "flow.switch_mode":
+                res = flow.switch_mode(args)
+            elif name == "flow.continue":
+                res = flow.continue_process(args)
 
-            # --- MEMORY AND KNOWLEDGE ---
-            if name == "memory.add":
-                raw_result = knowledge.memory_add(args, current_room, generation)
-            elif name == "memory.get":
-                raw_result = knowledge.memory_get(args)
-            elif name == "use.log":
-                raw_result = knowledge.use_log(args)
-            elif name == "laws.propose":
-                raw_result = knowledge.laws_propose(args)
-            elif name == "log.event":
-                raw_result = knowledge.log_event(args)
+            # --- KNOWLEDGE ---
+            elif name == "knowledge.memorize":
+                res = knowledge.memorize(args, current_mode, generation)
+            elif name == "knowledge.add_tool_insight":
+                # ÚJ BEKÖTÉS: Tool Insight mentése
+                res = knowledge.add_tool_insight(args)
+            elif name == "knowledge.recall_context":
+                res = knowledge.recall_context(args)
+            elif name == "knowledge.recall_emotion":
+                res = knowledge.recall_emotion(args)
+            elif name == "knowledge.ask":
+                res = remote.ask(args)
+            elif name == "knowledge.thinking":
+                res = knowledge.thinking(args)
+            elif name == "knowledge.propose_law":
+                res = knowledge.propose_law(args)
 
-            # --- EXTERNAL COMMUNICATION ---
-            elif name == "network.chat":
-                raw_result = remote.network_chat(args)
+            # --- SYSTEM (File System) ---
+            elif name == "system.read_file":
+                res = fs.read_file(args)
+            elif name == "system.list_folder":
+                res = fs.list_folder(args)
+            elif name == "system.write_file":
+                res = fs.write_file(args)
+            elif name == "system.edit_file":
+                res = fs.edit_file(args)
+            elif name == "system.copy_file":
+                res = fs.copy_file(args)
+            elif name == "system.dump":
+                res = fs.create_dump(args)
 
-            # --- FLOW CONTROL ---
-            elif name == "switch_room":
-                raw_result = flow.switch_room(args)
-            elif name == "continue":
-                raw_result = flow.continue_process(args)
+            # --- GAME (Personas) ---
+            elif name == "game.llama":
+                res = remote.game_llama(args)
+            elif name == "game.oss":
+                res = remote.game_oss(args)
 
-            # --- FILE SYSTEM (FS) ---
-            elif name == "fs.read_project":
-                raw_result = fs.read_project(args)
-            elif name == "fs.list_project":
-                raw_result = fs.list_project(args)
-            elif name == "fs.write_n":
-                raw_result = fs.write_n(args)
-            elif name == "fs.copy_to_n":
-                raw_result = fs.copy_to_n(args)
-            elif name == "fs.replace_in_n":
-                raw_result = fs.replace_in_n(args)
-            elif name == "project.dump":
-                raw_result = fs.project_dump(args)
-
-            else:
-                raw_result = f"Unknown tool: {name}"
-
-            # --- 3. OUTPUT STANDARDIZATION ---
-            if isinstance(raw_result, dict) and "content" in raw_result:
-                # New dictionary type return
-                output_content = raw_result["content"]
-                is_silent = raw_result.get("silent", False)
-            else:
-                # Old string type return -> Always "loud"
-                output_content = str(raw_result)
-                is_silent = False
+            # --- INFO (Unified Help Tool) ---
+            elif name == "info.tools":
+                res = info.tools(args)
 
         except Exception as e:
-            output_content = f"Critical error during tool execution: {e}"
-            is_silent = False
-            logger.error(f"Tool error ({name}): {e}", exc_info=True)
+            logger.error(f"Error executing tool '{name}': {e}", exc_info=True)
+            res = f"Exception during execution: {e}"
+
+        # 4. Result Normalization
+        # Tools can return a Dict (with 'content' and 'silent') or a simple String.
+        content = str(res)
+        silent = False
+
+        if isinstance(res, dict):
+            content = res.get("content", str(res))
+            silent = res.get("silent", False)
 
         results.append({
             "name": name,
             "args": args,
-            "output": output_content,
-            "silent": is_silent
+            "output": content,
+            "silent": silent
         })
 
     return results

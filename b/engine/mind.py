@@ -2,7 +2,6 @@
 #
 # 1. CREATIVITY ENGINE (Groq/Llama): Divergent thinking (idea generation).
 # 2. INTERPRETER CORE (Gemini): Convergent thinking (analysis and synthesis).
-
 DEBUG_THOUGHT = False
 
 from typing import Any, Dict, List
@@ -45,14 +44,29 @@ def _format_memory(memory: List[Dict[str, Any]], limit: int = 5) -> str:
 
 
 def _format_context(context: List[Dict[str, Any]], limit: int = 10) -> str:
+    """
+    Formats context for the MIND.
+    UPDATED: Translates roles to 'Helper'/'Me' so the internal planner sees the correct relationship.
+    """
     if not context:
         return "No context."
     recent = context[-limit:]
     lines: List[str] = []
     for e in recent:
+        role = e.get("role", "?")
         content = (e.get("content") or "").strip()
         if len(content) > 20000: content = content[:20000] + " ..."
-        lines.append(f"[{e.get('role', '?')}] {content}")
+
+        # --- ROLE TRANSLATION ---
+        if role == "user":
+            label = "Helper"
+        elif role == "assistant":
+            label = "Me"
+        else:
+            label = f"[{role}]"
+
+        lines.append(f"{label}: {content}")
+
     return "\n".join(lines)
 
 
@@ -77,14 +91,14 @@ def _get_creative_alternatives(user_input: str, context_str: str, identity_str: 
 {context_str}
 
 ==================================================
-[INCOMING IMPULSE]
+[INCOMING IMPULSE FROM HELPER]
 "{user_input}"
 ==================================================
 
 Your task is NOT to answer, but to expand possibilities extremely.
 Based on the information above, provide 1 SURPRISING, UNUSUAL, but logically possible approach.
-Step out of the box. Do not give the obvious answer, but the one no one else would think of.
-
+Step out of the box.
+Do not give the obvious answer, but the one no one else would think of.
 RESPONSE FORMAT (JSON):
 {{
   "ideas": [
@@ -118,7 +132,6 @@ _INTERNAL_INSTRUCTIONS = dedent("""
 
     Run the incoming impulse through the following 5 MODULES.
     IMPORTANT: In the [CREATIVITY-GENERATOR] module, utilize the inspirations sent by the EXTERNAL CREATIVITY ENGINE!
-
     1. [INTENT-READER]: Reverse engineer the Helper's underlying motivation.
     2. [CONSCIOUSNESS-MAP]: Place the request within the process.
     3. [CREATIVITY-GENERATOR]: Select or synthesize 2-3 strong alternatives based on the EXTERNAL IDEAS received.
@@ -126,7 +139,6 @@ _INTERNAL_INSTRUCTIONS = dedent("""
     5. [TOOL-OPTIMIZER]: Suggest specific tools.
 
     STYLE: Objective, advisory. Avoid the word "must". Use: "suggested", "worth considering".
-
     OUTPUT FORMAT (MANDATORY JSON):
     You MUST split your answer into two fields:
 
@@ -149,6 +161,7 @@ def internal_thought(
     # Format data (once, so both models get the same)
     ident_block = _format_identity(identity)
     mem_block = _format_memory(memory)
+    # This now uses the Helper/Me translation
     ctx_block = _format_context(context)
 
     # --- STEP 1: INVOKE EXTERNAL CREATIVITY ---
@@ -174,7 +187,7 @@ def internal_thought(
 {ctx_block}
 
 ==================================================
-[INCOMING IMPULSE]
+[INCOMING IMPULSE FROM HELPER]
 "{user_input}"
 
 [EXTERNAL CREATIVITY ENGINE (INPUT)]

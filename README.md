@@ -48,9 +48,9 @@ Read this file. 1. Briefly summarize what the project is about. 2. Identify its 
   - *Monologue*: Subconscious / internal monologue running in the background, using a separate creative LLM.
   - *Memory thread*: Saves, maintains, and deduplicates long-term memories.
 
-- **Rooms – "Consciousness" partitioned into states**
-  - Separate rooms (e.g., "Living Room," "Workshop," "Thinker") with different contexts and toolsets.
-
+- **Modes – "Consciousness" partitioned into operational states**
+  - Distinct modes (General, Developer, Analyst, Game) with different contexts, permissions, and toolsets.
+- 
 - **Long-term memory**
   - Postgres + vector extension, embedding-based RAG, recency/frequency/weighting.
 
@@ -83,7 +83,7 @@ Ai_home does not claim to be a conscious system.
 It takes **loose, practical metaphors** from the theories above:
 
 - recurrence → multi-threaded processing + memory loop,
-- global workspace → rooms + shared memory layer,
+- global workspace → distinct modes + shared memory layer,
 - metarepresentation → internal monologue + creative self-reflection,
 - agency → tool usage, modifying its own code in a controlled environment.
 
@@ -100,7 +100,7 @@ Ai_home draws from several existing directions but in its own opinionated form:
 
 - **LangGraph-like graph-based thinking**
   - LangGraph describes workflows as graphs for stateful, multi-actor LLM applications.
-  - Ai_home's rooms + intent + tool-routing system reflects a similar **graph-based approach**, just using the "rooms" metaphor.
+  - Ai_home's modes + intent + tool-routing system reflects a similar **graph-based approach**, just using the "modes" metaphor.
 
 - **AutoGen / multi-agent parallel**
   - AutoGen is a framework built on the collaboration of multiple agents, with multi-agent conversations and tool usage.
@@ -135,10 +135,14 @@ Ai_home draws from several existing directions but in its own opinionated form:
 - **Monologue thread** – Monitors the log, interprets, reflects, generates creative ideas.
 - **Memory thread** – Builds memories, deduplicates, updates the memory database.
 
-### 5.4 Rooms and Tool System
+### 5.4 Modes and Tool System
 
-- Each room has a separate context file and rules:
-  - e.g., different tools are available in the "Workshop" than in the "Thinker."
+- The system operates in different **Modes**, each with a specific context and allowed toolset:
+  - **General Mode:** The primary global state for coordination, decisions, and conversation.
+  - **Developer Mode:** Engineering focus. Grants access to system files for code modification and technical implementation.
+  - **Analyst Mode:** Pure strategy and analysis. No write access to system files to prevent accidental modification during deep thought.
+  - **Game Mode:** A disconnected playground for relaxation and testing, prioritizing emotion recall and roleplay.
+
 - Tool system modules:
   - Memory tools (creating, querying memories),
   - File system tools (protected by **ProjectFSGuardian**),
@@ -246,9 +250,8 @@ The strength of this project is not that it is a finished solution, but that it 
    We are exploring how an agent behaves when it has an explicit identity, internal laws, its own core intent, and a defined relationship to its human partner (the Helper). This matters because, for long-term collaboration, future AI systems will need to carry a consistent “line of self” instead of producing only ad-hoc answers.  
    *(in code: `identity.json` – Core Intent, Helper Intent, Laws; `engine/identity.py`; docs: “6. Identity and Relationship with the Helper”, Consciousness Rotation)*
 
-2. **Experience with an autonomous architecture that can carry complex tasks to completion**  
-   With the multi-threaded Worker–Monologue–Memory setup, the project explores how an agent can execute complex, multi-step tasks end-to-end while keeping a persistent internal state, instead of being optimized only for a single question–answer loop.  
-   *(in code: `b/main.py` – starting Worker, Monologue, Memory threads; `b/main_worker.py` – decision-making and tool calls; `engine/rooms.py` – rooms, intents, states of consciousness)*
+2. **Experience with an autonomous architecture that can carry complex tasks to completion** With the multi-threaded Worker–Monologue–Memory setup, the project explores how an agent can execute complex, multi-step tasks end-to-end while keeping a persistent internal state, instead of being optimized only for a single question–answer loop.  
+   *(in code: `b/main.py` – starting Worker, Monologue, Memory threads; `b/main_worker.py` – decision-making and tool calls; `engine/modes.py` – operational modes, intents, states of consciousness)*
 
 3. **Experience with proactive, value-aligned behaviour**  
    The Monologue thread continuously watches the logs, reflects on what is happening, and sends short `message_to_worker` hints – so the agent does not only react, but sometimes starts its own thinking cycles, aligned with its internal laws and values.  
@@ -285,7 +288,8 @@ The strength of this project is not that it is a finished solution, but that it 
 - Practical experience regarding:
   - how an initiative-taking, stateful, identity-bearing agent behaves,
   - what patterns/problems arise with long-term memory and internal monologue,
-  - how (and how not) to organize rooms, tools, memory, and versions.
+  - how (and how not) to organize modes, tools, memory, and versions.
+
 - These experiences can be useful for designing future:
   - more autonomous,
   - initiative-taking,

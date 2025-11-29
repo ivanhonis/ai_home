@@ -4,7 +4,7 @@ from .common import summarize_context, build_tools_description
 
 
 def build_proactive_prompt(
-        room_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
+        mode_id: str, generation: str, role_name: str, intent: str, identity: Dict[str, Any],
         relevant_memories: List[Dict[str, Any]],
         use_data: List[Dict[str, Any]], global_context_tail: List[Dict[str, Any]],
         local_context: List[Dict[str, Any]],
@@ -16,7 +16,7 @@ def build_proactive_prompt(
 ) -> str:
     # STEP 1: Load Base System
     base_system = build_base_system_prompt(
-        room_id, generation, role_name, intent, identity,
+        mode_id, generation, role_name, intent, identity,
         relevant_memories,
         use_data, global_context_tail,
         internal_plan="",
@@ -25,10 +25,10 @@ def build_proactive_prompt(
     )
 
     local_ctx_str = summarize_context(local_context, limit=25)
-    tools_desc = build_tools_description(room_id)
+    # UPDATED: Pass mode_id
+    tools_desc = build_tools_description(mode_id)
 
     # STEP 2: Compiling the Proactive Block
-    # Here there is no Helper, only internal drive.
     proactive_block = f"""
 ==================================================
 [PROACTIVE OPERATION]
@@ -43,10 +43,11 @@ Based on the analysis of the current situation, MIND suggests the following step
 """
 
     # STEP 3: Final Prompt
+    # UPDATED: [CURRENT ROOM LOG] -> [CURRENT MODE LOG]
     return f"""
 {base_system}
 
-[CURRENT ROOM LOG]
+[CURRENT MODE LOG]
 {local_ctx_str}
 
 {proactive_block}

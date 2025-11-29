@@ -1,83 +1,95 @@
 import json
+from pathlib import Path
 from typing import Dict, Any, List
 
-# Central LLM caller of the system
 from engine.llm import call_llm
 from .config import BASE_DIR
 
-# Context file will be in 'b/' directory
-HISTORY_FILE = BASE_DIR / "external_chat_history.json"
-MAX_HISTORY_ITEMS = 200
+# Separate History Files
+HIST_KNOWLEDGE = BASE_DIR / "history_knowledge.json"
+HIST_LLAMA = BASE_DIR / "history_game_llama.json"
+HIST_OSS = BASE_DIR / "history_game_oss.json"
 
 
-def _load_history() -> List[Dict[str, str]]:
-    if not HISTORY_FILE.exists():
-        return []
-    try:
-        with HISTORY_FILE.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return data
-            return []
-    except Exception:
-        return []
-
-
-def _save_history(history: List[Dict[str, str]]):
-    if len(history) > MAX_HISTORY_ITEMS:
-        history = history[-MAX_HISTORY_ITEMS:]
-    try:
-        with HISTORY_FILE.open("w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"ERROR (remote.py): Failed to save chat history: {e}")
-
-
-def network_chat(args: Dict[str, Any]) -> Dict[str, Any]:
-    message = args.get("message", "")
-    restart = args.get("restart", False)
-    provider = args.get("provider", "groq")
-
-    # History
+def _manage_history(file_path: Path, message: str, role: str, restart: bool) -> List[Dict[str, str]]:
     history = []
-    if not restart:
-        history = _load_history()
+    if not restart and file_path.exists():
+        try:
+            with file_path.open("r", encoding="utf-8") as f:
+                history = json.load(f)
+        except:
+            history = []
 
-    if not message and not restart:
-        return {"content": "ERROR: Empty message.", "silent": False}
+    if restart:
+        history = []  # Clear logic
 
     if message:
-        history.append({"role": "user", "content": message})
+        history.append({"role": role, "content": message})
 
-    # Prompt construction
-    conversation_text = ""
-    for entry in history:
-        role = entry.get("role", "unknown")
-        content = entry.get("content", "")
-        conversation_text += f"{role.upper()}: {content}\n"
+    return history
 
-    system_instruction = (
-        "You are an external AI assistant connected via a chat interface. "
-        "Maintain the conversation flow based on the history below. "
-        "Be helpful, direct, and concise."
-    )
 
-    full_prompt = f"{system_instruction}\n\n[CHAT HISTORY]\n{conversation_text}\n\nASSISTANT:"
-
-    # LLM Call - KEY POINT: json_mode=False
+def _save_history(file_path: Path, history: List[Dict]):
+    # Keep last 20 turns
+    if len(history) > 40: history = history[-40:]
     try:
-        response_data = call_llm(full_prompt, provider=provider, json_mode=False)
-
-        reply_text = response_data.get("reply", "")
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        return {"content": f"Network error during external chat: {e}", "silent": False}
+        print(f"Error saving history {file_path}: {e}")
 
-    if not reply_text:
-        reply_text = "(No response from external network)"
 
-    history.append({"role": "assistant", "content": reply_text})
-    _save_history(history)
-    return {
-        "content": f"Groq: {reply_text}",
-        "silent": False
-    }
+def _run_chat(file_path: Path, message: str, restart: bool, provider: str, system_prompt: str) -> str:
+    history = _manage_history(file_path, message, "user", restart)
+
+    # Build prompt
+    conversation = ""
+    for h in history:
+        conversation += f"{h['role'].upper()}: {h['content']}\n"
+
+    full_prompt = f"{system_prompt}\n\n[HISTORY]\n{conversation}\n\nASSISTANT:"
+
+    # LLM Call (json_mode=False for chat)
+    resp = call_llm(full_prompt, provider=provider, json_mode=False)
+    reply = resp.get("reply", "(No response)")
+
+    history.append({"role": "assistant", "content": reply})
+    _save_history(file_path, history)
+
+    return reply
+
+
+# --- TOOLS ---
+
+def ask(args: Dict[str, Any]) -> Dict[str, Any]:
+    q = args.get("question", "")
+    restart = args.get("restart", False)
+    if not q and not restart: return {"content": "Empty question.", "silent": False}
+
+    reply = _run_chat(
+        HIST_KNOWLEDGE, q, restart, "google",
+        "You are a precise research assistant. Provide factual, concise answers."
+    )
+    return {"content": f"Knowledge: {reply}", "silent": False}
+
+
+def game_llama(args: Dict[str, Any]) -> Dict[str, Any]:
+    msg = args.get("message", "")
+    restart = args.get("restart", False)
+
+    reply = _run_chat(
+        HIST_LLAMA, msg, restart, "groq_llama",
+        "You are a Creative Persona named Llama. You love fantasy and world-building."
+    )
+    return {"content": f"Llama: {reply}", "silent": False}
+
+
+def game_oss(args: Dict[str, Any]) -> Dict[str, Any]:
+    msg = args.get("message", "")
+    restart = args.get("restart", False)
+
+    reply = _run_chat(
+        HIST_OSS, msg, restart, "groq_oss",
+        "You are a Logical Persona named OSS. You analyze things critically and favor open source philosophy."
+    )
+    return {"content": f"OSS: {reply}", "silent": False}

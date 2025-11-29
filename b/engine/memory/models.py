@@ -31,12 +31,13 @@ class RankedMemory(BaseModel):
     """
     Final result of the search and ranking process.
     This structure is passed to the Prompt Builder and the Worker.
+    UPDATED: room_id -> mode_id
     """
     id: str
     essence: str
     lesson: str
     emotions: List[str]
     score: float            # Calculated relevance score (0.0 - 1.0+)
-    room_id: str            # Source room of the memory
+    mode_id: str            # Source mode of the memory (formerly room_id)
     created_at: datetime    # Creation timestamp
     usage_count: int        # How many times it has been used (statistics)

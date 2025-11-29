@@ -38,11 +38,12 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
 
         try:
             # Check where we are before every task
-            current_room = main_data.rooms.get_current_room_id()
-            current_intent = main_data.rooms.get_current_intent()
+            # UPDATED: rooms -> modes
+            current_mode = main_data.modes.get_current_mode_id()
+            current_intent = main_data.modes.get_current_intent()
 
-            # Load data (Now without legacy memory)
-            data = main_data.load_all_context_data(current_room)
+            # Load data
+            data = main_data.load_all_context_data(current_mode)
 
             # --- PROCESS SUBCONSCIOUS MESSAGES LIST ---
             mono_raw = data.get("monologue_data", [])
@@ -64,12 +65,11 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
 
             # --- A: USER MESSAGE OR CONTINUATION AFTER TOOL (REACTIVE) ---
             if task_type in ["user_message", "llm_call_after_tool"]:
-                logger.debug(f"Worker: Reactive thinking ({current_room})")
+                logger.debug(f"Worker: Reactive thinking ({current_mode})")
 
                 user_msg = task.get("content", None)
 
                 # 1. INTERNAL THINKING AND PLANNING (MIND.PY CALL)
-                # Passing relevant memories to MIND instead of the old list
                 thought = mind_lib.internal_thought(
                     identity=data["identity"],
                     memory=data["relevant_memories"],
@@ -81,8 +81,9 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
                 internal_essence = thought.get("essence", "")
 
                 # 2. EXTERNAL RESPONSE GENERATION
+                # UPDATED: room_id -> mode_id
                 prompt = build_reactive_prompt(
-                    room_id=current_room,
+                    mode_id=current_mode,
                     generation=GENERATION,
                     role_name=ROLE_NAME,
                     intent=current_intent,
@@ -98,26 +99,28 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
                 )
 
                 llm_response = call_llm(prompt)
-                result_queue.put({"type": "llm_result", "data": llm_response, "room_id": current_room})
+                # UPDATED: key 'room_id' -> 'mode_id'
+                result_queue.put({"type": "llm_result", "data": llm_response, "mode_id": current_mode})
 
             # --- B: TOOL CALL EXECUTION ---
             elif task_type == "tool_call":
-                logger.debug(f"Worker: Tool execution ({current_room})")
+                logger.debug(f"Worker: Tool execution ({current_mode})")
                 tools_to_run = task.get("tools", [])
 
+                # UPDATED: dispatch with current_mode
                 tool_results = dispatch_tools(
                     tools_to_run,
                     generation=GENERATION,
                     role=ROLE_ID,
                     slot=main_data.BASE_DIR.name,
-                    current_room=current_room
+                    current_mode=current_mode
                 )
 
-                result_queue.put({"type": "tool_result", "data": tool_results, "room_id": current_room})
+                result_queue.put({"type": "tool_result", "data": tool_results, "mode_id": current_mode})
 
             # --- C: PROACTIVE THINKING ---
             elif task_type == "proactive_thought":
-                logger.debug(f"Worker: Proactive thinking ({current_room})")
+                logger.debug(f"Worker: Proactive thinking ({current_mode})")
 
                 thought_input = f"Internal reflection needed. My current intent: {current_intent}. Evaluate the situation and create a plan."
 
@@ -131,8 +134,9 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
                 internal_plan = thought.get("plan", "")
                 internal_essence = thought.get("essence", "")
 
+                # UPDATED: build_proactive_prompt parameters
                 prompt = build_proactive_prompt(
-                    room_id=current_room,
+                    mode_id=current_mode,
                     generation=GENERATION,
                     role_name=ROLE_NAME,
                     intent=current_intent,
@@ -147,7 +151,7 @@ def worker_loop(task_queue: Queue, result_queue: Queue):
                 )
 
                 llm_response = call_llm(prompt)
-                result_queue.put({"type": "llm_result", "data": llm_response, "room_id": current_room})
+                result_queue.put({"type": "llm_result", "data": llm_response, "mode_id": current_mode})
 
         except Exception as e:
             logger.error(f"Error in Worker: {e}", exc_info=True)
